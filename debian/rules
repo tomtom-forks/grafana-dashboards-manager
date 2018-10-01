@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+DESTDIR := $(CURDIR)/debian/grafana-dashboard-manager
+
+override_dh_auto_build:
+	go version
+	gb build
+
+override_dh_auto_install:
+	[ ! -d $(DESTDIR) ] && mkdir -p $(DESTDIR)
+	install $(CURDIR)/bin/pusher -D $(DESTDIR)/opt/grafana-dashboard-manager/pusher
+	install $(CURDIR)/bin/puller -D $(DESTDIR)/opt/grafana-dashboard-manager/puller
+	install $(CURDIR)/config.example.yaml -D $(DESTDIR)/opt/grafana-dashboard-manager/config.example.yaml
