@@ -5,3 +5,8 @@ config.yaml
 
 _test
 .envrc
+
+debian/debhelper-build-stamp
+debian/grafana-dashboard-manager.substvars
+debian/.debhelper
+debian/files

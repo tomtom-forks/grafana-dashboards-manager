@@ -1,0 +1,12 @@
+Source: grafana-dashboard-manager
+Section: admin
+Priority: optional
+Maintainer: Sébastien Blaisot <sebastien.blaisot@cozycloud.cc>
+Build-Depends: debhelper (>= 9)
+Standards-Version: 3.9.8
+Homepage: https://cozy.io
+
+Package: grafana-dashboard-manager
+Architecture: amd64
+Depends: ${misc:Depends},${shlibs:Depends}
+Description: The Grafana Dashboards Manager is a tool to help you manage your Grafana dashboards using Git.
