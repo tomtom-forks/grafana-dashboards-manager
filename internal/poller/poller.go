@@ -138,12 +138,16 @@ func poller(
 			// Grafana will auto-update the version number after we pushed the new
 			// dashboards, so we use the puller mechanic to pull the updated numbers and
 			// commit them in the git repo.
-			if err = puller.PullGrafanaAndCommit(client, cfg); err != nil {
-				logrus.WithFields(logrus.Fields{
-					"error":      err,
-					"repo":       cfg.Git.User + "@" + cfg.Git.URL,
-					"clone_path": cfg.Git.ClonePath,
-				}).Error("Call to puller returned an error")
+			if !cfg.Git.DontPush {
+				if err = puller.PullGrafanaAndCommit(client, cfg); err != nil {
+					logrus.WithFields(logrus.Fields{
+						"error":      err,
+						"repo":       cfg.Git.User + "@" + cfg.Git.URL,
+						"clone_path": cfg.Git.ClonePath,
+					}).Error("Call to puller returned an error")
+				}
+			} else {
+				logrus.Info("Skipping git push - asked not to")
 			}
 		}
 

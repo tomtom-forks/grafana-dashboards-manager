@@ -144,10 +144,14 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 			}
 		}
 
-		// Push the changes (we don't do it in the if clause above in case there
-		// are pending commits in the local repo that haven't been pushed yet).
-		if err = repo.Push(); err != nil {
-			return err
+		if !cfg.Git.DontPush {
+			// Push the changes (we don't do it in the if clause above in case there
+			// are pending commits in the local repo that haven't been pushed yet).
+			if err = repo.Push(); err != nil {
+				return err
+			}
+		} else {
+			logrus.Info("Skipping git push - asked not to")
 		}
 	} else {
 		// If we're on simple sync mode, write versions and don't do anything
