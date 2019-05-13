@@ -2,7 +2,6 @@ package common
 
 import (
 	"strings"
-
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana/helpers"
@@ -48,6 +47,7 @@ func FilterIgnored(
 func PushFiles(filenames []string, contents map[string][]byte, client *grafana.Client) {
 	// Push all files to the Grafana API
 	for _, filename := range filenames {
+		logrus.Info("Grafana: Create/Upload", filename)
 		if err := client.CreateOrUpdateDashboard(contents[filename]); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error":    err,
