@@ -189,7 +189,7 @@ func (r *Repository) GetModifiedAndRemovedFiles(
 	// Iterate over the commits contained in the commit's log.
 	err = iter.ForEach(func(commit *object.Commit) error {
 		// If the commit was done by the manager, go to the next iteration.
-		if commit.Author.Email == r.cfg.CommitsAuthor.Email {
+		if commit.Author.Email == r.cfg.CommitsAuthor.Email && commit.Author.Name == r.cfg.CommitsAuthor.Name {
 			return nil
 		}
 
