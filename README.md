@@ -38,20 +38,14 @@ Because it hosts a webserver, the pusher runs as a daemon and never exists unles
 
 ## Build
 
-The manager can be built using [gb](https://getgb.io), which can be installed by running
+The manager can be built by cloning this repository and running
 
 ```bash
-go get github.com/constabulary/gb/...
+go build ./cmd/puller/
+go build ./cmd/pusher/
 ```
 
-It can then be built by cloning this repository and running
-
-```bash
-cd grafana-dashboards-manager
-gb build
-```
-
-Once built, binaries are located in the `bin` directory (which is created by `gb` if it doesn't exist).
+Once built, binaries are located in the current directory.
 
 ## Run
 
