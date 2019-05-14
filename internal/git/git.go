@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"gopkg.in/src-d/go-git.v4/plumbing/storer"
 	"io/ioutil"
 	"os"
 
@@ -12,7 +13,6 @@ import (
 	gogit "gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
-	"gopkg.in/src-d/go-git.v4/plumbing/storer"
 	"gopkg.in/src-d/go-git.v4/plumbing/transport"
 	gitssh "gopkg.in/src-d/go-git.v4/plumbing/transport/ssh"
 )
@@ -188,15 +188,21 @@ func (r *Repository) GetModifiedAndRemovedFiles(
 
 	// Iterate over the commits contained in the commit's log.
 	err = iter.ForEach(func(commit *object.Commit) error {
-		// If the commit was done by the manager, go to the next iteration.
-		if commit.Author.Email == r.cfg.CommitsAuthor.Email && commit.Author.Name == r.cfg.CommitsAuthor.Name {
-			return nil
-		}
 
 		// If the current commit is the oldest one requested, break the loop.
 		if commit.Hash.String() == from.Hash.String() {
 			return storer.ErrStop
 		}
+
+		// If the commit was done by the manager, go to the next iteration.
+		if commit.Author.Email == r.cfg.CommitsAuthor.Email && commit.Author.Name == r.cfg.CommitsAuthor.Name {
+			return nil
+		}
+
+		logrus.WithFields(logrus.Fields{
+			"hash": commit.Hash.String(),
+			"msg":  commit.Message,
+		}).Info("Scanning git entry ")
 
 		// Load stats from the current commit.
 		stats, err := commit.Stats()
@@ -211,14 +217,15 @@ func (r *Repository) GetModifiedAndRemovedFiles(
 			if err != nil && err != object.ErrFileNotFound {
 				return err
 			}
-
 			// If the content couldn't be retrieved, it means the file was
 			// removed in this commit, else it means that it was either added or
 			// modified.
 			if err == object.ErrFileNotFound {
 				removed = append(removed, stat.Name)
+				logrus.Info("Git entry removed: ", stat.Name)
 			} else {
 				modified = append(modified, stat.Name)
+				logrus.Info("Git entry modified: ", stat.Name)
 			}
 		}
 
