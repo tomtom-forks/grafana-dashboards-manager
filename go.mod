@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/gosimple/slug v1.5.0
+	github.com/icza/dyno v0.0.0-20180601094105-0c96289f9585
 	github.com/rainycape/unidecode v0.0.0-20150907023854-cb7f23ec59be // indirect
 	github.com/sirupsen/logrus v1.4.1
 	golang.org/x/crypto v0.0.0-20180904163835-0709b304e793

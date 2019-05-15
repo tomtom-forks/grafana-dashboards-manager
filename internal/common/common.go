@@ -1,10 +1,10 @@
 package common
 
 import (
-	"strings"
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana/helpers"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -18,6 +18,14 @@ func FilterIgnored(
 	filesToPush *map[string][]byte, cfg *config.Config,
 ) (err error) {
 	for filename, content := range *filesToPush {
+		max := len(content)
+		if max > 20 {
+			max = 20
+		}
+		logrus.WithFields(logrus.Fields{
+			"filename":    filename,
+			"content":	string(content[:max]),
+		}).Info("Checking whether to ignore")
 		// Don't set versions.json to be pushed
 		if strings.HasSuffix(filename, "versions-metadata.json") {
 			delete(*filesToPush, filename)
@@ -27,14 +35,18 @@ func FilterIgnored(
 		// Check if dashboard is ignored
 		ignored, err := isIgnored(content, cfg)
 		if err != nil {
-			return err
+			logrus.WithFields(logrus.Fields{
+				"filename": filename,
+				"err":      err,
+				"content":  string(content),
+			}).Info("Ignoring because of error")
+			ignored = true
 		}
 
 		if ignored {
 			delete(*filesToPush, filename)
 		}
 	}
-
 	return
 }
 

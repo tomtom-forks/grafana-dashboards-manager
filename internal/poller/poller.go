@@ -3,11 +3,11 @@ package poller
 import (
 	"time"
 
+	"github.com/bruce34/grafana-dashboards-manager/internal/common"
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/git"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
 	"github.com/bruce34/grafana-dashboards-manager/internal/puller"
-	"github.com/bruce34/grafana-dashboards-manager/internal/common"
 
 	"github.com/sirupsen/logrus"
 )
