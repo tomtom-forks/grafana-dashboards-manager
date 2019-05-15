@@ -33,6 +33,9 @@ git:
         name: Grafana Dashboard Manager
         # Author's email.
         email: grafana-dashboards-manager@company.tld
+    # use to build the name of the versions file, "hostname" is special and will cause
+    # os.Hostname() to be used
+    versions_file_prefix: hostname
 
 # An alternative to Git synchronisation is the "simple sync" mode. This will
 # only back up your dashboards on the disk and won't do anything else.

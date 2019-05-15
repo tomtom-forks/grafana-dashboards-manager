@@ -13,15 +13,23 @@ import (
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
 
+func getVersionsFile(prefix string) (filename string) {
+	if (prefix == "hostname") {
+		hostname, _ := os.Hostname()
+		return hostname + "-" + "versions-metadata.json"
+	}
+	return prefix + "versions-metadata.json"
+}
+
 // getDashboardsVersions reads the "versions.json" file at the root of the git
 // repository and returns its content as a map.
 // If the file doesn't exist, returns an empty map.
 // Return an error if there was an issue looking for the file (except when the
 // file doesn't exist), reading it or formatting its content into a map.
-func getDashboardsVersions(clonePath string) (versions map[string]int, err error) {
+func getDashboardsVersions(clonePath string, versionsFile string) (versions map[string]int, err error) {
 	versions = make(map[string]int)
 
-	filename := clonePath + "/versions.json"
+	filename := clonePath + "/" + getVersionsFile(versionsFile)
 
 	_, err = os.Stat(filename)
 	if os.IsNotExist(err) {
@@ -46,7 +54,7 @@ func getDashboardsVersions(clonePath string) (versions map[string]int, err error
 // Returns an error if there was an issue when conerting to JSON, indenting or
 // writing on disk.
 func writeVersions(
-	versions map[string]int, dv map[string]diffVersion, clonePath string,
+	versions map[string]int, dv map[string]diffVersion, clonePath string, versionsFile string,
 ) (err error) {
 	for slug, diff := range dv {
 		versions[slug] = diff.newVersion
@@ -62,7 +70,7 @@ func writeVersions(
 		return
 	}
 
-	filename := clonePath + "/versions.json"
+	filename := clonePath + "/" + getVersionsFile(versionsFile)
 	return rewriteFile(filename, indentedJSON)
 }
 
@@ -75,11 +83,11 @@ func commitNewVersions(
 	versions map[string]int, dv map[string]diffVersion, worktree *gogit.Worktree,
 	cfg *config.Config,
 ) (err error) {
-	if err = writeVersions(versions, dv, cfg.Git.ClonePath); err != nil {
+	if err = writeVersions(versions, dv, cfg.Git.ClonePath, cfg.Git.VersionsFilePrefix); err != nil {
 		return err
 	}
 
-	if _, err = worktree.Add("versions.json"); err != nil {
+	if _, err = worktree.Add(getVersionsFile(cfg.Git.VersionsFilePrefix)); err != nil {
 		return err
 	}
 
@@ -97,7 +105,9 @@ func commitNewVersions(
 // getCommitMessage creates a commit message that summarises the version updates
 // included in the commit.
 func getCommitMessage(dv map[string]diffVersion) string {
-	message := "Updated dashboards\n"
+	hostname, _ := os.Hostname()
+
+	message := "Updated dashboards on " + hostname + "\n"
 
 	for slug, diff := range dv {
 		message += fmt.Sprintf(

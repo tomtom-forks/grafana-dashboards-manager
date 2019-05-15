@@ -48,6 +48,7 @@ type GitSettings struct {
 	ClonePath      string              `yaml:"clone_path"`
 	CommitsAuthor  CommitsAuthorConfig `yaml:"commits_author"`
 	DontPush       bool                `yaml:"dont_push"`
+	VersionsFilePrefix string              `yaml:"versions_file_prefix"`
 }
 
 // CommitsAuthorConfig contains the configuration (name + email address) to use

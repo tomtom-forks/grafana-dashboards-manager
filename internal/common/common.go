@@ -19,7 +19,7 @@ func FilterIgnored(
 ) (err error) {
 	for filename, content := range *filesToPush {
 		// Don't set versions.json to be pushed
-		if strings.HasSuffix(filename, "versions.json") {
+		if strings.HasSuffix(filename, "versions-metadata.json") {
 			delete(*filesToPush, filename)
 			continue
 		}
