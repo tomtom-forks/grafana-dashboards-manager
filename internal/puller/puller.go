@@ -23,7 +23,7 @@ type diffVersion struct {
 
 // PullGrafanaAndCommit pulls all the dashboards from Grafana except the ones
 // which name starts with "test", then commits each of them to Git except for
-// those that have a newer or equal version number already versionned in the
+// those that have a newer or equal version number already versioned in the
 // repo.
 func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error) {
 	var repo *git.Repository
@@ -136,22 +136,28 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 
 		// Check if there's uncommited changes, and if that's the case, commit
 		// them.
-		if !status.IsClean() {
-			logrus.Info("Comitting changes")
+		if !cfg.Git.DontCommit {
+			if !status.IsClean() {
+				logrus.Info("Comitting changes")
 
-			if err = commitNewVersions(dbVersions, dv, w, cfg); err != nil {
-				return err
+				if err = commitNewVersions(dbVersions, dv, w, cfg); err != nil {
+					return err
+				}
 			}
+		} else {
+			logrus.Info("Skipping git commit - asked not to")
 		}
 
-		if !cfg.Git.DontPush {
+		if !cfg.Git.DontPush && !cfg.Git.DontCommit {
 			// Push the changes (we don't do it in the if clause above in case there
 			// are pending commits in the local repo that haven't been pushed yet).
 			if err = repo.Push(); err != nil {
+				logrus.WithFields(logrus.Fields{
+					"err": err, }).Info("Failed to push")
 				return err
 			}
 		} else {
-			logrus.Info("Skipping git push - asked not to")
+			logrus.Info("Skipping git commit/push - asked not to")
 		}
 	} else {
 		// If we're on simple sync mode, write versions and don't do anything

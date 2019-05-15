@@ -58,7 +58,7 @@ func NewRepository(cfg *config.GitSettings) (r *Repository, invalidRepo bool, er
 // Sync synchronises a Git repository using a given configuration. "synchronises"
 // means that, if the repo from the configuration isn't already cloned in the
 // directory specified in the configuration, it will clone the repository (unless
-// if explicitely told not to), else it will simply pull it in order to be up to
+// if explicitly told not to), else it will simply pull it in order to be up to
 // date with the remote.
 // Returns the go-git representation of the repository.
 // Returns an error if there was an issue loading the SSH private key, checking
@@ -157,6 +157,7 @@ func (r *Repository) Log(fromHash string) (object.CommitIter, error) {
 
 	return r.Repo.Log(&gogit.LogOptions{
 		From: hash,
+//		Order: gogit.LogOrderCommitterTime,
 	})
 }
 
@@ -195,7 +196,9 @@ func (r *Repository) GetModifiedAndRemovedFiles(
 		}
 
 		// If the commit was done by the manager, go to the next iteration.
-		if commit.Author.Email == r.cfg.CommitsAuthor.Email && commit.Author.Name == r.cfg.CommitsAuthor.Name {
+		if !r.cfg.ApplyManagerCommits &&
+			commit.Author.Email == r.cfg.CommitsAuthor.Email &&
+			commit.Author.Name == r.cfg.CommitsAuthor.Name {
 			return nil
 		}
 

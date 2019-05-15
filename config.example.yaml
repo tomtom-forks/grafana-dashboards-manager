@@ -36,9 +36,16 @@ git:
         name: Grafana Dashboard Manager
         # Author's email.
         email: grafana-dashboards-manager@company.tld
+    # disable pushing back to a git repo - useful for testing
+    dont_commit: false
+    dont_push: false
     # use to build the name of the versions file, "hostname" is special and will cause
     # os.Hostname() to be used
     versions_file_prefix: hostname
+    # Should changes made by a manager (this program) be applied.
+    # Set to true if using in sync mode
+    apply_manager_commits: true
+
 
 # An alternative to Git synchronisation is the "simple sync" mode. This will
 # only back up your dashboards on the disk and won't do anything else.
@@ -67,7 +74,7 @@ pusher:
     #               given interval, and compare the updated Git history with the
     #               previous one to determine what to push to Grafana.
     sync_mode: webhook
-    # Configuration for the given sync mode. The current uncommented exemple
+    # Configuration for the given sync mode. The current uncommented example
     # works for the "webhook" mode. Here's a config example for the "git-pull"
     # mode:
     #
@@ -78,7 +85,7 @@ pusher:
     config:
         # Interface the webhook will listen on.
         interface: 127.0.0.1
-        # Port the webhool will listen on.
+        # Port the webhook will listen on.
         port: 8080
         # Path on which the webhook will live. Full webhook URL will be
         # interface:port/path.
