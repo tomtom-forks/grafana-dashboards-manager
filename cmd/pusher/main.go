@@ -40,7 +40,7 @@ func main() {
 	}
 
 	// Initialise the Grafana API client.
-	grafanaClient := grafana.NewClient(cfg.Grafana.BaseURL, cfg.Grafana.APIKey)
+	grafanaClient := grafana.NewClient(cfg.Grafana.BaseURL, cfg.Grafana.APIKey, cfg.Grafana.Username, cfg.Grafana.Password)
 
 	// Set up either a webhook or a poller depending on the mode specified in the
 	// configuration file.

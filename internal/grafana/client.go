@@ -12,14 +12,17 @@ import (
 
 // Client implements a Grafana API client, and contains the instance's base URL
 // and API key, along with an HTTP client used to request the API.
+// use either APIKey or Username/Password
 type Client struct {
 	BaseURL    string
 	APIKey     string
+	Username   string
+	Password   string
 	httpClient *http.Client
 }
 
 // NewClient returns a new Grafana API client from a given base URL and API key.
-func NewClient(baseURL string, apiKey string) (c *Client) {
+func NewClient(baseURL string, apiKey string, username string, password string) (c *Client) {
 	// Grafana doesn't support double slashes in the API routes, so we strip the
 	// last slash if there's one, because request() will append one anyway.
 	if strings.HasSuffix(baseURL, "/") {
@@ -29,7 +32,10 @@ func NewClient(baseURL string, apiKey string) (c *Client) {
 	return &Client{
 		BaseURL:    baseURL,
 		APIKey:     apiKey,
+		Username:   username,
+		Password:   password,
 		httpClient: new(http.Client),
+
 	}
 }
 
@@ -60,8 +66,12 @@ func (c *Client) request(method string, endpoint string, body []byte) ([]byte, e
 	}
 
 	// Add the API key to the request as an Authorization HTTP header
-	authHeader := fmt.Sprintf("Bearer %s", c.APIKey)
-	req.Header.Add("Authorization", authHeader)
+	if c.APIKey != "" {
+		authHeader := fmt.Sprintf("Bearer %s", c.APIKey)
+		req.Header.Add("Authorization", authHeader)
+	} else {
+		req.SetBasicAuth(c.Username, c.Password)
+	}
 
 	// If the request isn't a GET, the body will be sent as JSON, so we need to
 	// append the appropriate header

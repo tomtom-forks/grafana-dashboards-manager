@@ -39,7 +39,7 @@ func main() {
 	}).Info("Sync mode set")
 
 	// Initialise the Grafana API client.
-	client := grafana.NewClient(cfg.Grafana.BaseURL, cfg.Grafana.APIKey)
+	client := grafana.NewClient(cfg.Grafana.BaseURL, cfg.Grafana.APIKey, cfg.Grafana.Username, cfg.Grafana.Password)
 	// Run the puller.
 	if err := puller.PullGrafanaAndCommit(client, cfg); err != nil {
 		logrus.Panic(err)

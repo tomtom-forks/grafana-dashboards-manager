@@ -29,6 +29,8 @@ type Config struct {
 type GrafanaSettings struct {
 	BaseURL      string `yaml:"base_url"`
 	APIKey       string `yaml:"api_key"`
+	Username     string `yaml:"username"`
+	Password     string `"yaml:password"`
 	IgnorePrefix string `yaml:"ignore_prefix,omitempty"`
 }
 
