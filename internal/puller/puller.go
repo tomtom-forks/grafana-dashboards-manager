@@ -152,6 +152,22 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 		}
 	}
 
+	// remove any dashboards that have gone
+	for slug, dashboard := range fileVersionFile.DashboardMetaBySlug {
+		logrus.WithFields(logrus.Fields{
+			"slug":          slug,
+			"name":          dashboard.Title,
+			"got": grafanaVersionFile.DashboardMetaBySlug[slug],
+		}).Debug("dashboard on filesystem")
+		if _, ok := grafanaVersionFile.DashboardMetaBySlug[slug]; !ok {
+			logrus.WithFields(logrus.Fields{
+				"slug":          slug,
+				"name":          dashboard.Title,
+			}).Info("Removing dashboard from filesystem")
+			removeDashboardFromFilesystem(slug, w)
+		}
+	}
+
 	// Iterate over the folders
 	for _, folderResponse := range grafanaVersionFile.FoldersMetaByUID {
 		if err = addFolderChangesToRepo(folderResponse, syncPath, w); err != nil {
@@ -296,6 +312,12 @@ func addDashboardChangesToRepo(
 
 	return nil
 }
+
+func removeDashboardFromFilesystem(slug string, worktree *gogit.Worktree) (err error) {
+	_, err = worktree.Remove(filepath.Join("dashboards", slug + ".json"))
+	return
+}
+
 
 // rewriteFile removes a given file and re-creates it with a new content. The
 // content is provided as JSON, and is then indented before being written down.
