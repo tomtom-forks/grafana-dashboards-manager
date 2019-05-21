@@ -3,6 +3,7 @@ package puller
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
 	"io/ioutil"
 	"os"
 	"time"
@@ -12,6 +13,7 @@ import (
 	gogit "gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
+
 
 func getVersionsFile(prefix string) (filename string) {
 	if (prefix == "hostname") {
@@ -26,8 +28,14 @@ func getVersionsFile(prefix string) (filename string) {
 // If the file doesn't exist, returns an empty map.
 // Return an error if there was an issue looking for the file (except when the
 // file doesn't exist), reading it or formatting its content into a map.
-func getDashboardsVersions(clonePath string, versionsFile string) (versions map[string]int, err error) {
-	versions = make(map[string]int)
+func GetDashboardsVersions(clonePath string, versionsFile string) (versions grafana.VersionFile, err error) {
+
+	versions = grafana.VersionFile{
+		DashboardMetaBySlug: make(map[string]grafana.DbSearchResponse,0),
+		DashboardBySlug: make(map[string]*grafana.Dashboard, 0),
+		FoldersMetaByUID: make(map[string]grafana.DbSearchResponse, 0),
+		DashboardVersionBySlug: make(map[string]int,0),
+	}
 
 	filename := clonePath + "/" + getVersionsFile(versionsFile)
 
@@ -41,7 +49,9 @@ func getDashboardsVersions(clonePath string, versionsFile string) (versions map[
 		return
 	}
 
-	err = json.Unmarshal(data, &versions)
+	if err = json.Unmarshal(data, &versions); err != nil {
+		return
+	}
 	return
 }
 
@@ -53,13 +63,8 @@ func getDashboardsVersions(clonePath string, versionsFile string) (versions map[
 // "versions.json" file.
 // Returns an error if there was an issue when conerting to JSON, indenting or
 // writing on disk.
-func writeVersions(
-	versions map[string]int, dv map[string]diffVersion, clonePath string, versionsFile string,
+func writeVersions(versions grafana.VersionFile, dv map[string]diffVersion, clonePath string, versionsFile string,
 ) (err error) {
-	for slug, diff := range dv {
-		versions[slug] = diff.newVersion
-	}
-
 	rawJSON, err := json.Marshal(versions)
 	if err != nil {
 		return
@@ -74,13 +79,23 @@ func writeVersions(
 	return rewriteFile(filename, indentedJSON)
 }
 
+func createFoldersFromMetaData(foldersMetaByUID map[string]grafana.DbSearchResponse) (folders map[string]grafana.Folder) {
+	folders = make(map[string]grafana.Folder, 0)
+	for _, folder := range foldersMetaByUID {
+		folders[folder.UID] = grafana.Folder{
+			Title: folder.Title,
+			UID: folder.UID,
+		}
+	}
+	return
+}
+
 // commitNewVersions creates a git commit from updated dashboard files (that
 // have previously been added to the git index) and an updated "versions.json"
 // file that it creates (with writeVersions) and add to the index.
 // Returns an error if there was an issue when creating the "versions.json"
 // file, adding it to the index or creating the commit.
-func commitNewVersions(
-	versions map[string]int, dv map[string]diffVersion, worktree *gogit.Worktree,
+func commitNewVersions(versions grafana.VersionFile, dv map[string]diffVersion, worktree *gogit.Worktree,
 	cfg *config.Config,
 ) (err error) {
 	if err = writeVersions(versions, dv, cfg.Git.ClonePath, cfg.Git.VersionsFilePrefix); err != nil {
@@ -90,7 +105,6 @@ func commitNewVersions(
 	if _, err = worktree.Add(getVersionsFile(cfg.Git.VersionsFilePrefix)); err != nil {
 		return err
 	}
-
 	_, err = worktree.Commit(getCommitMessage(dv), &gogit.CommitOptions{
 		Author: &object.Signature{
 			Name:  cfg.Git.CommitsAuthor.Name,
@@ -111,7 +125,7 @@ func getCommitMessage(dv map[string]diffVersion) string {
 
 	for slug, diff := range dv {
 		message += fmt.Sprintf(
-			"%s: %d => %d\n", slug, diff.oldVersion, diff.newVersion,
+			"%s: %d => %d\n", slug, diff.old, diff.new,
 		)
 	}
 

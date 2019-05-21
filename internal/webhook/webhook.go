@@ -1,14 +1,11 @@
 package webhook
 
 import (
-	"io/ioutil"
-	"path/filepath"
-
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/git"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
 	"github.com/bruce34/grafana-dashboards-manager/internal/puller"
-	"github.com/bruce34/grafana-dashboards-manager/internal/common"
+	"github.com/bruce34/grafana-dashboards-manager/internal/poller"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/go-playground/webhooks.v3"
@@ -109,7 +106,7 @@ func HandlePush(payload interface{}, header webhooks.Header) {
 
 	// Get the content of the removed files before pulling from the remote, because
 	// we won't be able to access them afterwards
-	if err = getFilesContents(removed, &contents, cfg); err != nil {
+	if err = grafana.GetFilesContents(removed, &contents, "", cfg); err != nil {
 		return
 	}
 
@@ -125,28 +122,39 @@ func HandlePush(payload interface{}, header webhooks.Header) {
 	}
 
 	// Get the content of the added files
-	if err = getFilesContents(added, &contents, cfg); err != nil {
+	if err = grafana.GetFilesContents(added, &contents, "", cfg); err != nil {
 		return
 	}
 
 	// Get the content of the modified files
-	if err = getFilesContents(modified, &contents, cfg); err != nil {
+	if err = grafana.GetFilesContents(modified, &contents, "", cfg); err != nil {
 		return
 	}
 
 	// Remove the ignored files from the map
-	if err = common.FilterIgnored(&contents, cfg); err != nil {
+	if err = grafana.FilterIgnored(&contents, cfg); err != nil {
 		return
 	}
 
+	dashboardsAdded, foldersAdded := poller.SeparateDashboardsFolders(added)
+	dashboardsModified, foldersModified := poller.SeparateDashboardsFolders(modified)
+	dashboardsRemoved, _ := poller.SeparateDashboardsFolders(removed)
+
+	syncPath := puller.SyncPath(cfg)
+	fileVersionFile, err := puller.GetDashboardsVersions(syncPath, cfg.Git.VersionsFilePrefix)
+	grafanaClient.CreateFolders(append(foldersAdded, foldersModified...), contents)
+
+	var grafanaVersionFile grafana.VersionFile
+	_, grafanaVersionFile, err = puller.GetGrafanaFileVersion(grafanaClient, cfg)
+
 	// Push all added and modified dashboards to Grafana
-	common.PushFiles(added, contents, grafanaClient)
-	common.PushFiles(modified, contents, grafanaClient)
+	grafana.PushFiles(dashboardsAdded, contents, fileVersionFile, grafanaVersionFile, grafanaClient)
+	grafana.PushFiles(dashboardsModified, contents, fileVersionFile, grafanaVersionFile, grafanaClient)
 
 	// If the user requested it, delete all dashboards that were removed
 	// from the repository.
 	if deleteRemoved {
-		common.DeleteDashboards(removed, contents, grafanaClient)
+		grafana.DeleteDashboards(dashboardsRemoved, contents, grafanaClient)
 	}
 
 	// Grafana will auto-update the version number after we pushed the new
@@ -161,26 +169,3 @@ func HandlePush(payload interface{}, header webhooks.Header) {
 	}
 }
 
-// getFilesContents takes a slice of files' names and a map mapping a file's name
-// to its content and appends to it the current content of all of the files for
-// which the name appears in the slice.
-// Returns an error if there was an issue reading a file.
-func getFilesContents(
-	filenames []string, contents *map[string][]byte, cfg *config.Config,
-) (err error) {
-	// Iterate over files' names
-	for _, filename := range filenames {
-		// Compute the file's path
-		filePath := filepath.Join(cfg.Git.ClonePath, filename)
-		// Read the file's content
-		fileContent, err := ioutil.ReadFile(filePath)
-		if err != nil {
-			return err
-		}
-
-		// Append the content to the map
-		(*contents)[filename] = fileContent
-	}
-
-	return
-}

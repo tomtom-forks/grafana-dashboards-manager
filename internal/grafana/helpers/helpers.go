@@ -6,17 +6,18 @@ import (
 	"github.com/gosimple/slug"
 )
 
-// GetDashboardSlug reads the JSON description of a dashboard and computes a
-// slug from the dashboard's title.
+// GetSlug reads the JSON description of a dashboard or folder and computes a
+// slug from its title.
 // Returns an error if there was an issue parsing the dashboard JSON description.
-func GetDashboardSlug(dbJSONDescription []byte) (dbSlug string, err error) {
+func GetSlug(dbJSONDescription []byte) (dbSlug string, err error) {
 	// Parse the file's content to find the dashboard's title
-	var dashboardTitle struct {
+	var thingTitle struct {
 		Title string `json:"title"`
 	}
 
-	err = json.Unmarshal(dbJSONDescription, &dashboardTitle)
+	err = json.Unmarshal(dbJSONDescription, &thingTitle)
 	// Compute the slug
-	dbSlug = slug.Make(dashboardTitle.Title)
+	dbSlug = slug.Make(thingTitle.Title)
 	return
 }
+

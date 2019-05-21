@@ -36,6 +36,22 @@ Please also note that, because of how deeply intricated with Git it is, the push
 Because it hosts a webserver, the pusher runs as a daemon and never exists unless it `panic`s because of an error, or it is killed (e.g. with `Ctrl+C`).
 
 
+### Git directory layout
+
+```
+<hostname>-versions-metadata.json
+dashboards/
+  my-new-dashboard.json
+  ...
+folders/
+  my-new-folder.json
+```
+Each file under dashboards/ and folders/ is a JSON file that was retrieved from grafana. Any grafana specific numbers  are removed, e.g. "id" as this varies between hosts.
+
+Additionally in the case of dashboards, meta data that is wanted to be shared between grafanas is stored with a '__' prefix. e.g. __folderUID to mark which folder a dashboard is stored in.
+
+By default, each different host keeps its versions meta data in a file called <hostname>-versions-metadata.json  
+
 ## Build
 
 The manager can be built by cloning this repository and running
@@ -71,7 +87,12 @@ You can specify a configuration file via the command line flag `--config`, which
 
 If the `--config` flag isn't present in the command line call, it will default to a `config.yaml` file located in the directory from where the call is made.
 
-The pusher can also be called with the `--delete-removed` flag which will allows it to check for dashboards which files were removed from the Git repository and delete them from Grafana.
+The pusher also supports the following flags: 
+
+`--delete-removed` delete dashboards (not folders for now) from grafana when the files were removed from Git
+
+`--push-all` create/update all folders and dashboards in grafana. NB this will overwrite any chances in grafana.
+
 
 ## Configure
 

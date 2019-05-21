@@ -5,82 +5,59 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/git"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
 
+	"github.com/icza/dyno"
 	"github.com/sirupsen/logrus"
 	gogit "gopkg.in/src-d/go-git.v4"
-	"github.com/icza/dyno"
 )
 
 // diffVersion represents a dashboard version diff.
 type diffVersion struct {
-	oldVersion int
-	newVersion int
+	old int
+	new int
 }
 
-// PullGrafanaAndCommit pulls all the dashboards from Grafana except the ones
-// which name starts with "test", then commits each of them to Git except for
-// those that have a newer or equal version number already versioned in the
-// repo.
-func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error) {
-	var repo *git.Repository
-	var w *gogit.Worktree
-	var syncPath string
-
-	// Only do Git stuff if there's a configuration for that. On "simple sync"
-	// mode, we don't need do do any versioning.
-	// We need to set syncPath accordingly, though, because we use it later.
+func SyncPath(cfg *config.Config) (syncPath string) {
 	if cfg.Git != nil {
 		syncPath = cfg.Git.ClonePath
-
-		// Clone or pull the repo
-		repo, _, err = git.NewRepository(cfg.Git)
-		if err != nil {
-			return err
-		}
-
-		if err = repo.Sync(false); err != nil {
-			return err
-		}
-
-		w, err = repo.Repo.Worktree()
-		if err != nil {
-			return err
-		}
 	} else {
 		syncPath = cfg.SimpleSync.SyncPath
 	}
+	return
+}
 
+func GetGrafanaFileVersion(client *grafana.Client, cfg *config.Config) (dashURIs []string, grafanaVersionFile grafana.VersionFile, err error) {
 	// Get URIs for all known dashboards
 	logrus.Info("Getting dashboard URIs")
-	uris, err := client.GetDashboardsURIs()
+	dashURIs, grafanaDashboardMetaByTitle, grafanaFoldersMetaByUID, _, err := client.GetDashboardsURIs()
 	if err != nil {
-		return err
+		return
 	}
 
-	dv := make(map[string]diffVersion)
-
-	// Load versions
-	logrus.Info("Getting local dashboard versions")
-	dbVersions, err := getDashboardsVersions(syncPath, cfg.Git.VersionsFilePrefix)
-	if err != nil {
-		return err
+	grafanaVersionFile = grafana.VersionFile{
+		DashboardMetaByTitle: grafanaDashboardMetaByTitle,
+		DashboardMetaBySlug: make(map[string]grafana.DbSearchResponse,0),
+		DashboardBySlug: make(map[string]*grafana.Dashboard, 0),
+		FoldersMetaByUID: grafanaFoldersMetaByUID,
+		DashboardVersionBySlug: make(map[string]int, 0),
 	}
-
 	// Iterate over the dashboards URIs
-	for _, uri := range uris {
+	for _, uri := range dashURIs {
 		logrus.WithFields(logrus.Fields{
 			"uri": uri,
-		}).Info("Retrieving dashboard")
+		}).Debug("Retrieving dashboard")
 
 		// Retrieve the dashboard JSON
-		dashboard, err := client.GetDashboard(uri)
+		var dashboard *grafana.Dashboard
+		dashboard, err = client.GetDashboard(uri)
 		if err != nil {
-			return err
+			return
 		}
 
 		if len(cfg.Grafana.IgnorePrefix) > 0 {
@@ -95,22 +72,71 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 			}
 		}
 
+		grafanaVersionFile.DashboardBySlug[dashboard.Slug] = dashboard
+		grafanaVersionFile.DashboardMetaBySlug[dashboard.Slug] = grafanaVersionFile.DashboardMetaByTitle[dashboard.Name]
+		grafanaVersionFile.DashboardVersionBySlug[dashboard.Slug] = dashboard.Version
+	}
+	return
+}
+
+// PullGrafanaAndCommit pulls all the dashboards from Grafana except the ones
+// which name starts with "test", then commits each of them to Git except for
+// those that have a newer or equal version number already versioned in the
+// repo.
+func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error) {
+	var repo *git.Repository
+	var w *gogit.Worktree
+
+	syncPath := SyncPath(cfg)
+	// Only do Git stuff if there's a configuration for that. On "simple sync"
+	// mode, we don't need do do any versioning.
+	// We need to set syncPath accordingly, though, because we use it later.
+	if cfg.Git != nil {
+		// Clone or pull the repo
+		repo, _, err = git.NewRepository(cfg.Git)
+		if err != nil {
+			return err
+		}
+
+		if err = repo.Sync(false); err != nil {
+			return err
+		}
+
+		w, err = repo.Repo.Worktree()
+		if err != nil {
+			return err
+		}
+	}
+
+	var grafanaVersionFile grafana.VersionFile
+	_, grafanaVersionFile, err = GetGrafanaFileVersion(client, cfg)
+
+	dv := make(map[string]diffVersion)
+	// Load versions
+	logrus.Info("PullGrafanaAndCommit: Getting local dashboard versions")
+	fileVersionFile, err := GetDashboardsVersions(syncPath, cfg.Git.VersionsFilePrefix)
+	if err != nil {
+		return err
+	}
+
+	// Iterate over the dashboards URIs
+	for slug, dashboard := range grafanaVersionFile.DashboardBySlug {
 		// Check if there's a version for this dashboard in the data loaded from
 		// the "versions.json" file. If there's a version and it's older (lower
 		// version number) than the version we just retrieved from the Grafana
 		// API, or if there's no known version (ok will be false), write the
 		// changes in the repo and add the modified file to the git index.
-		version, ok := dbVersions[dashboard.Slug]
-		if !ok || dashboard.Version > version {
+		fileVersion, ok := fileVersionFile.DashboardVersionBySlug[slug]
+		if !ok || dashboard.Version > fileVersion {
 			logrus.WithFields(logrus.Fields{
-				"uri":           uri,
+				"slug":          slug,
 				"name":          dashboard.Name,
-				"local_version": version,
+				"local_version": fileVersion,
 				"new_version":   dashboard.Version,
 			}).Info("Grafana has a newer version, updating")
 
 			if err = addDashboardChangesToRepo(
-				dashboard, syncPath, w,
+				dashboard, syncPath, w, grafanaVersionFile.DashboardMetaBySlug[slug].FolderUID,
 			); err != nil {
 				return err
 			}
@@ -119,16 +145,42 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 			// version will be initialised to the 0-value of the int type, which
 			// is 0, so the previous version number will be considered to be 0,
 			// which is the behaviour we want.
-			dv[dashboard.Slug] = diffVersion{
-				oldVersion: version,
-				newVersion: dashboard.Version,
+			dv[slug] = diffVersion{
+				old: fileVersion,
+				new: grafanaVersionFile.DashboardBySlug[slug].Version,
 			}
 		}
 	}
 
+	// Iterate over the folders
+	for _, folderResponse := range grafanaVersionFile.FoldersMetaByUID {
+		if err = addFolderChangesToRepo(folderResponse, syncPath, w); err != nil {
+			return err
+		}
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"grafanaVersionFile":           grafanaVersionFile,
+	}).Debug("GrafanaVersionsFile")
+
+
+	logrus.WithFields(logrus.Fields{
+		"fileVersionFile":           fileVersionFile,
+	}).Debug("FileVersionsFile")
+
+
 	// Only do Git stuff if there's a configuration for that. On "simple sync"
 	// mode, we don't need do do any versioning.
 	if cfg.Git != nil {
+		// inefficiently, we write the versions here just in case the versions are different but no dashboards are.
+		// then the file will be rewritten inside commitNewVersions
+
+		if err = writeVersions(grafanaVersionFile, dv, cfg.Git.ClonePath, cfg.Git.VersionsFilePrefix); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"err":           err,
+			}).Info("Marshall error for versions file")
+		}
+
 		var status gogit.Status
 		status, err = w.Status()
 		if err != nil {
@@ -139,9 +191,9 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 		// them.
 		if !cfg.Git.DontCommit {
 			if !status.IsClean() {
-				logrus.Info("Comitting changes")
+				logrus.Info("Committing changes")
 
-				if err = commitNewVersions(dbVersions, dv, w, cfg); err != nil {
+				if err = commitNewVersions(grafanaVersionFile, dv, w, cfg); err != nil {
 					return err
 				}
 			}
@@ -163,7 +215,7 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 	} else {
 		// If we're on simple sync mode, write versions and don't do anything
 		// else.
-		if err = writeVersions(dbVersions, dv, syncPath, cfg.Git.VersionsFilePrefix); err != nil {
+		if err = writeVersions(grafanaVersionFile, dv, syncPath, cfg.Git.VersionsFilePrefix); err != nil {
 			return err
 		}
 	}
@@ -171,12 +223,46 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 	return nil
 }
 
+func addFolderChangesToRepo(
+	folderResponse grafana.DbSearchResponse, clonePath string, worktree *gogit.Worktree,
+) (err error) {
+	folder := grafana.Folder {
+		Title: folderResponse.Title,
+		UID: folderResponse.UID,
+		FolderUID: folderResponse.FolderUID,
+		URI: folderResponse.URI,
+		Starred: folderResponse.Starred,
+		Tags: folderResponse.Tags,
+	}
+
+	slugExt := folder.Title + ".json"
+	dirPath := filepath.Join(clonePath, "folders")
+	os.MkdirAll(dirPath, os.ModePerm)
+	rawJSON, err := json.Marshal(folder)
+	if err != nil {
+		return
+	}
+
+	if err = rewriteFile(filepath.Join(dirPath, slugExt), rawJSON); err != nil {
+		return
+	}
+
+	// If worktree is nil, it means that it hasn't been initialised, which means
+	// the sync mode is "simple sync" and not Git.
+	if worktree != nil {
+		if _, err = worktree.Add(filepath.Join("folders", slugExt)); err != nil {
+			return err
+		}
+	}
+
+	return
+}
+
 // addDashboardChangesToRepo writes a dashboard content in a file, then adds the
 // file to the git index so it can be comitted afterwards.
 // Returns an error if there was an issue with either of the steps.
 func addDashboardChangesToRepo(
-	dashboard *grafana.Dashboard, clonePath string, worktree *gogit.Worktree,
-) error {
+	dashboard *grafana.Dashboard, clonePath string, worktree *gogit.Worktree, folderUID string) error {
 	slugExt := dashboard.Slug + ".json"
 	// we take out the versions here, as versions are generated by grafana and
 	// therefore can't be sanely sync'd across multiple grafana instances
@@ -187,19 +273,23 @@ func addDashboardChangesToRepo(
 	// the following keys are unique only to an individual grafana instance
 	dyno.Delete(jsRaw, "version")
 	dyno.Delete(jsRaw, "id")
+	dyno.Set(jsRaw, folderUID, "__folderUID")
 	rawJSON, err := json.Marshal(jsRaw)
 	if err != nil {
 		return err
 	}
 
-	if err := rewriteFile(clonePath+"/"+slugExt, rawJSON); err != nil {
+	dirPath := filepath.Join(clonePath, "dashboards")
+	os.MkdirAll(dirPath, os.ModePerm)
+
+	if err := rewriteFile(filepath.Join(dirPath, slugExt), rawJSON); err != nil {
 		return err
 	}
 
 	// If worktree is nil, it means that it hasn't been initialised, which means
 	// the sync mode is "simple sync" and not Git.
 	if worktree != nil {
-		if _, err := worktree.Add(slugExt); err != nil {
+		if _, err := worktree.Add(filepath.Join("dashboards", slugExt)); err != nil {
 			return err
 		}
 	}

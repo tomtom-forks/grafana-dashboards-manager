@@ -122,8 +122,12 @@ func (r *Repository) Push() (err error) {
 			"clone_path": r.cfg.ClonePath,
 			"error":      err,
 		})
+	} else {
+		logrus.WithFields(logrus.Fields{
+			"repo":       r.cfg.User + "@" + r.cfg.URL,
+			"clone_path": r.cfg.ClonePath,
+		}).Info("Successfully pushed to the remote")
 	}
-
 	return err
 }
 

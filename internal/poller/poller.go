@@ -1,9 +1,9 @@
 package poller
 
 import (
+	"strings"
 	"time"
 
-	"github.com/bruce34/grafana-dashboards-manager/internal/common"
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/git"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
@@ -119,20 +119,32 @@ func poller(
 			// modified and removed file.
 			mergedContents := mergeContents(modified, removed, filesContents, previousFilesContents)
 
-			// Filter out all files that are supposed to be ignored by the
-			// dashboard manager.
-			if err = common.FilterIgnored(&mergedContents, cfg); err != nil {
+			// Separate out dashboards and folders
+			dashboardsModified, foldersModified := SeparateDashboardsFolders(modified)
+			dashboardsRemoved, _ := SeparateDashboardsFolders(removed)
+
+			// Load versions
+			logrus.Info("Getting local dashboard versions")
+			syncPath := puller.SyncPath(cfg)
+			fileVersionFile, err := puller.GetDashboardsVersions(syncPath, cfg.Git.VersionsFilePrefix)
+			if err != nil {
+				logrus.Error("Failed to get dashboard versions from local file system")
 				return err
 			}
-
-			// Push the contents of the files that were added or modified to the
-			// Grafana API.
-			common.PushFiles(modified, mergedContents, client)
+			// ensure all folders are created
+			client.CreateFolders(foldersModified, mergedContents)
+			// cowardly not deleting folders as they may delete all dashboards underneath them
+			var grafanaVersionFile grafana.VersionFile
+			_, grafanaVersionFile, err = puller.GetGrafanaFileVersion(client, cfg)
+			grafana.Push(cfg, fileVersionFile, grafanaVersionFile, dashboardsModified, mergedContents, client)
+			//// Push the contents of the files that were added or modified to the
+			//// Grafana API.
+			//grafana.PushFiles(modified, mergedContents, fileVersionFile, client)
 
 			// If the user requested it, delete all dashboards that were removed
 			// from the repository.
 			if delRemoved {
-				common.DeleteDashboards(removed, mergedContents, client)
+				grafana.DeleteDashboards(dashboardsRemoved, mergedContents, client)
 			}
 
 			// Grafana will auto-update the version number after we pushed the new
@@ -165,7 +177,7 @@ func poller(
 // repository, the current contents of the files in the Git repository, and the
 // contents of the files in the Git repository as they were at the previous
 // iteration of the poller's loop.
-// It will create and return a map contaning the current content of all
+// It will create and return a map containing the current content of all
 // added/modified file, and the previous content of all removed file (since
 // they are no longer accessible on disk). All files in this map is either added,
 // modified or removed on the Git repository.
@@ -185,5 +197,22 @@ func mergeContents(
 		merged[removedFile] = previousFilesContents[removedFile]
 	}
 
+	return
+}
+
+func SeparateDashboardsFolders(modified []string) (dashboardsModified []string, foldersModified []string){
+	foldersModified = make([]string, 0)
+	dashboardsModified = make([]string, 0)
+	for _, o := range modified {
+		if strings.HasPrefix(o, "dashboards") {
+			dashboardsModified = append(dashboardsModified, o)
+		} else if strings.HasPrefix(o, "folders") {
+			foldersModified = append(foldersModified, o)
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"filename":      o,
+			}).Info("Ignoring unknown changed file")
+		}
+	}
 	return
 }

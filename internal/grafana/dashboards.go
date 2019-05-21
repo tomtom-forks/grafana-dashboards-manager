@@ -3,19 +3,24 @@ package grafana
 import (
 	"encoding/json"
 	"fmt"
-
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana/helpers"
+	"github.com/icza/dyno"
+	"github.com/sirupsen/logrus"
+	"strconv"
 )
 
-// dbSearchResponse represents an element of the response to a dashboard search
+// DbSearchResponse represents an element of the response to a dashboard search
 // query
-type dbSearchResponse struct {
+type DbSearchResponse struct {
 	ID      int      `json:"id"`
 	Title   string   `json:"title"`
 	URI     string   `json:"uri"`
 	Type    string   `json:"type"`
 	Tags    []string `json:"tags"`
 	Starred bool     `json:"isStarred"`
+	UID     string   `json:"uid"`
+	FolderUID string `json:"folderUid,omitEmpty"`
+	FolderID int     `json:"folderId,omitEmpty"`
 }
 
 // dbCreateOrUpdateRequest represents the request sent to create or update a
@@ -23,6 +28,7 @@ type dbSearchResponse struct {
 type dbCreateOrUpdateRequest struct {
 	Dashboard rawJSON `json:"dashboard"`
 	Overwrite bool    `json:"overwrite"`
+	FolderID  int     `json:"folderId"`
 }
 
 // dbCreateOrUpdateResponse represents the response sent by the Grafana API to
@@ -42,6 +48,29 @@ type Dashboard struct {
 	Name    string
 	Slug    string
 	Version int
+}
+
+type Folder struct {
+	Title string `json:"title"`
+	UID   string `json:"uid"`
+	URI     string   `json:"uri"`
+	Tags    []string `json:"tags"`
+	Starred bool     `json:"isStarred"`
+	FolderUID string `json:"folderUid,omitEmpty"`
+}
+
+type DashboardVersion struct {
+	Meta	DbSearchResponse
+
+}
+
+type VersionFile struct {
+	DashboardMetaByTitle   map[string]DbSearchResponse `json:"dashboardMetaByTitle"`
+	DashboardMetaBySlug    map[string]DbSearchResponse `json:"dashboardMetaBySlug"`
+	DashboardBySlug        map[string]*Dashboard       `json:"-"`
+
+	FoldersMetaByUID        map[string]DbSearchResponse `json:"foldersMetaByUID"`
+	DashboardVersionBySlug map[string]int              `json:"dashboardVersionBySlug"`
 }
 
 // UnmarshalJSON tells the JSON parser how to unmarshal JSON data into an
@@ -91,22 +120,48 @@ func (d *Dashboard) setDashboardNameFromRawJSON() (err error) {
 // then returns the dashboards' URIs. An URI will look like "db/[dashboard slug]".
 // Returns an error if there was an issue requesting the URIs or parsing the
 // response body.
-func (c *Client) GetDashboardsURIs() (URIs []string, err error) {
+func (c *Client) GetDashboardsURIs() (URIs []string, dashboardMetaBySlug map[string]DbSearchResponse, FoldersMetaByUID map[string]DbSearchResponse, Folders []DbSearchResponse, err error) {
+
+	FoldersMetaByUID = make(map[string]DbSearchResponse,0)
+	dashboardMetaBySlug = make(map[string]DbSearchResponse,0)
+
 	resp, err := c.request("GET", "search", nil)
 	if err != nil {
 		return
 	}
 
-	var respBody []dbSearchResponse
+	var respBody []DbSearchResponse
+
 	if err = json.Unmarshal(resp, &respBody); err != nil {
 		return
 	}
 
-	URIs = make([]string, 0)
-	for _, db := range respBody {
-		URIs = append(URIs, db.URI)
-	}
+	logrus.WithFields(logrus.Fields{
+		"json": string(resp),
+	}).Debug("JSON")
 
+	URIs = make([]string, 0)
+	Folders = make([]DbSearchResponse, 0)
+
+	for _, db := range respBody {
+		if db.Type == "dash-db" {
+			URIs = append(URIs, db.URI)
+			dashboardMetaBySlug[string(db.Title)] = db
+			logrus.WithFields(logrus.Fields{
+				"db": db,
+			}).Info("Dashboard metadata from grafana")
+		} else if db.Type == "dash-folder" {
+			Folders = append(Folders, db)
+			FoldersMetaByUID[strconv.Itoa(db.ID)] = db
+			logrus.WithFields(logrus.Fields{
+				"db": db,
+			}).Info("Folder metadata from grafana")
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"db": db,
+			}).Warn("Unknown metadata from grafana")
+		}
+	}
 	return
 }
 
@@ -133,22 +188,52 @@ func (c *Client) GetDashboard(URI string) (db *Dashboard, err error) {
 // creation, else it's an update.
 // Returns an error if there was an issue generating the request body, performing
 // the request or decoding the response's body.
-func (c *Client) CreateOrUpdateDashboard(contentJSON []byte) (err error) {
+func (c *Client) CreateOrUpdateDashboard(contentJSON []byte, folderID int) (err error) {
 	reqBody := dbCreateOrUpdateRequest{
 		Dashboard: rawJSON(contentJSON),
 		Overwrite: true,
+		FolderID: folderID,
 	}
 
 	// Generate the request body's JSON
 	reqBodyJSON, err := json.Marshal(reqBody)
+
+	var v interface{}
+	if err := json.Unmarshal([]byte(reqBodyJSON), &v); err != nil {
+		panic(err)
+	}
+	idv1, _ := dyno.Get(v, "dashboard/id")
+
+	err2 := dyno.Set(v, nil, "dashboard", "id")
+	idv, err3 := dyno.Get(v, "dashboard", "id")
+	dyno.Delete(v, "__folderUID")
+
+	reqBodyJSON, err = json.Marshal(v)
+	logrus.WithFields(logrus.Fields{
+//		"reqBodyJson":    string(reqBodyJSON),
+		"err2": err2,
+		"idv": idv,
+		"idv1": idv1,
+		"err3": err3,
+	}).Info("Removed??")
 	if err != nil {
 		return
 	}
+	err = c.createOrUpdateDashboardFolder(reqBodyJSON, contentJSON, "dashboards/db")
+	return
+}
+
+func (c *Client) createOrUpdateDashboardFolder(reqBodyJSON []byte, contentJSON []byte, apiPath string) (err error) {
+	err = c.createOrUpdateDashboardFolderMethod(reqBodyJSON, contentJSON, apiPath, "POST")
+	return
+}
+
+func (c *Client) createOrUpdateDashboardFolderMethod(reqBodyJSON []byte, contentJSON []byte, apiPath string, method string) (err error) {
 
 	var httpError *httpUnkownError
 	var isHttpUnknownError bool
 	// Send the request
-	respBodyJSON, err := c.request("POST", "dashboards/db", reqBodyJSON)
+	respBodyJSON, err := c.request(method, apiPath, reqBodyJSON)
 	if err != nil {
 		// Check the error against the httpUnkownError type in order to decide
 		// how to process the error
@@ -166,16 +251,16 @@ func (c *Client) CreateOrUpdateDashboard(contentJSON []byte) (err error) {
 	}
 
 	if respBody.Status != "success" && isHttpUnknownError {
-		// Get the dashboard's slug for logging
+		// Get the dashboard/folders's slug for logging
 		var slug string
-		slug, err = helpers.GetDashboardSlug(contentJSON)
+		slug, err = helpers.GetSlug(contentJSON)
 		if err != nil {
 			return
 		}
 
 		return fmt.Errorf(
-			"Failed to update dashboard %s (%d %s): %s",
-			slug, httpError.StatusCode, respBody.Status, respBody.Message,
+			"Failed to update %s %s (%d %s): %s req: %s",
+			apiPath, slug, httpError.StatusCode, respBody.Status, respBody.Message, reqBodyJSON,
 		)
 	}
 

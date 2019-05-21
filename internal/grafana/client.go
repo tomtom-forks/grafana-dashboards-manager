@@ -55,7 +55,7 @@ func (c *Client) request(method string, endpoint string, body []byte) ([]byte, e
 	logrus.WithFields(logrus.Fields{
 		"route":  route,
 		"method": method,
-	}).Info("Querying the Grafana HTTP API")
+	}).Debug("Querying the Grafana HTTP API")
 
 	url := c.BaseURL + route
 
@@ -89,7 +89,7 @@ func (c *Client) request(method string, endpoint string, body []byte) ([]byte, e
 		"route":  route,
 		"method": method,
 		"code":   resp.StatusCode,
-	}).Info("The Grafana HTTP API responded")
+	}).Info("Grafana API response")
 
 	// Read the response body
 	respBody, err := ioutil.ReadAll(resp.Body)

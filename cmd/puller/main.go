@@ -2,11 +2,11 @@ package main
 
 import (
 	"flag"
+	"github.com/bruce34/grafana-dashboards-manager/internal/puller"
 
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
 	"github.com/bruce34/grafana-dashboards-manager/internal/logger"
-	"github.com/bruce34/grafana-dashboards-manager/internal/puller"
 
 	"github.com/sirupsen/logrus"
 )
