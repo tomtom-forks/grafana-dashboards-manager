@@ -93,6 +93,7 @@ The pusher also supports the following flags:
 
 `--push-all` create/update all folders and dashboards in grafana. NB this will overwrite any chances in grafana.
 
+`--single-shot` run once and exit, only works in git mode
 
 ## Configure
 

@@ -17,6 +17,7 @@ import (
 var (
 	deleteRemoved = flag.Bool("delete-removed", false, "For each file removed from Git, delete the corresponding dashboard on the Grafana API")
 	pushAll = flag.Bool("push-all", false, "Force push all files, then quit")
+	singleShot = flag.Bool("single-shot", false, "Run once, then quit")
 )
 
 func main() {
@@ -89,7 +90,7 @@ func main() {
 		err = webhook.Setup(cfg, grafanaClient, *deleteRemoved)
 		break
 	case "git-pull":
-		err = poller.Setup(cfg, grafanaClient, *deleteRemoved)
+		err = poller.Setup(cfg, grafanaClient, *deleteRemoved, *singleShot)
 	}
 
 	if err != nil {
