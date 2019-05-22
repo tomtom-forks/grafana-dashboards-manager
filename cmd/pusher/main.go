@@ -95,5 +95,6 @@ func main() {
 
 	if err != nil {
 		logrus.Panic(err)
+		os.Exit(1)
 	}
 }

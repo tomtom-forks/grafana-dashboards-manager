@@ -2,11 +2,11 @@ package main
 
 import (
 	"flag"
-	"github.com/bruce34/grafana-dashboards-manager/internal/puller"
-
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
 	"github.com/bruce34/grafana-dashboards-manager/internal/logger"
+	"github.com/bruce34/grafana-dashboards-manager/internal/puller"
+	"os"
 
 	"github.com/sirupsen/logrus"
 )
@@ -43,5 +43,6 @@ func main() {
 	// Run the puller.
 	if err := puller.PullGrafanaAndCommit(client, cfg); err != nil {
 		logrus.Panic(err)
+		os.Exit(1)
 	}
 }
