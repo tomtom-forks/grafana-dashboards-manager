@@ -110,6 +110,9 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 
 	var grafanaVersionFile grafana.VersionFile
 	_, grafanaVersionFile, err = GetGrafanaFileVersion(client, cfg)
+	if err != nil {
+		return err
+	}
 
 	dv := make(map[string]diffVersion)
 	// Load versions
