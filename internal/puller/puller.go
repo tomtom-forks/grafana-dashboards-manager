@@ -41,10 +41,10 @@ func GetGrafanaFileVersion(client *grafana.Client, cfg *config.Config) (dashURIs
 	}
 
 	grafanaVersionFile = grafana.VersionFile{
-		DashboardMetaByTitle: grafanaDashboardMetaByTitle,
-		DashboardMetaBySlug: make(map[string]grafana.DbSearchResponse,0),
-		DashboardBySlug: make(map[string]*grafana.Dashboard, 0),
-		FoldersMetaByUID: grafanaFoldersMetaByUID,
+		DashboardMetaByTitle:   grafanaDashboardMetaByTitle,
+		DashboardMetaBySlug:    make(map[string]grafana.DbSearchResponse, 0),
+		DashboardBySlug:        make(map[string]*grafana.Dashboard, 0),
+		FoldersMetaByUID:       grafanaFoldersMetaByUID,
 		DashboardVersionBySlug: make(map[string]int, 0),
 	}
 	// Iterate over the dashboards URIs
@@ -158,14 +158,14 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 	// remove any dashboards that have gone
 	for slug, dashboard := range fileVersionFile.DashboardMetaBySlug {
 		logrus.WithFields(logrus.Fields{
-			"slug":          slug,
-			"name":          dashboard.Title,
-			"got": grafanaVersionFile.DashboardMetaBySlug[slug],
+			"slug": slug,
+			"name": dashboard.Title,
+			"got":  grafanaVersionFile.DashboardMetaBySlug[slug],
 		}).Debug("dashboard on filesystem")
 		if _, ok := grafanaVersionFile.DashboardMetaBySlug[slug]; !ok {
 			logrus.WithFields(logrus.Fields{
-				"slug":          slug,
-				"name":          dashboard.Title,
+				"slug": slug,
+				"name": dashboard.Title,
 			}).Info("Removing dashboard from filesystem")
 			removeDashboardFromFilesystem(slug, w)
 		}
@@ -179,14 +179,12 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 	}
 
 	logrus.WithFields(logrus.Fields{
-		"grafanaVersionFile":           grafanaVersionFile,
+		"grafanaVersionFile": grafanaVersionFile,
 	}).Debug("GrafanaVersionsFile")
 
-
 	logrus.WithFields(logrus.Fields{
-		"fileVersionFile":           fileVersionFile,
+		"fileVersionFile": fileVersionFile,
 	}).Debug("FileVersionsFile")
-
 
 	// Only do Git stuff if there's a configuration for that. On "simple sync"
 	// mode, we don't need do do any versioning.
@@ -196,7 +194,7 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 
 		if err = writeVersions(grafanaVersionFile, dv, cfg.Git.ClonePath, cfg.Git.VersionsFilePrefix); err != nil {
 			logrus.WithFields(logrus.Fields{
-				"err":           err,
+				"err": err,
 			}).Info("Marshall error for versions file")
 		}
 
@@ -225,7 +223,7 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 			// are pending commits in the local repo that haven't been pushed yet).
 			if err = repo.Push(); err != nil {
 				logrus.WithFields(logrus.Fields{
-					"err": err, }).Info("Failed to push")
+					"err": err}).Info("Failed to push")
 				return err
 			}
 		} else {
@@ -245,13 +243,13 @@ func PullGrafanaAndCommit(client *grafana.Client, cfg *config.Config) (err error
 func addFolderChangesToRepo(
 	folderResponse grafana.DbSearchResponse, clonePath string, worktree *gogit.Worktree,
 ) (err error) {
-	folder := grafana.Folder {
-		Title: folderResponse.Title,
-		UID: folderResponse.UID,
+	folder := grafana.Folder{
+		Title:     folderResponse.Title,
+		UID:       folderResponse.UID,
 		FolderUID: folderResponse.FolderUID,
-		URI: folderResponse.URI,
-		Starred: folderResponse.Starred,
-		Tags: folderResponse.Tags,
+		URI:       folderResponse.URI,
+		Starred:   folderResponse.Starred,
+		Tags:      folderResponse.Tags,
 	}
 
 	slugExt := folder.Title + ".json"
@@ -317,10 +315,9 @@ func addDashboardChangesToRepo(
 }
 
 func removeDashboardFromFilesystem(slug string, worktree *gogit.Worktree) (err error) {
-	_, err = worktree.Remove(filepath.Join("dashboards", slug + ".json"))
+	_, err = worktree.Remove(filepath.Join("dashboards", slug+".json"))
 	return
 }
-
 
 // rewriteFile removes a given file and re-creates it with a new content. The
 // content is provided as JSON, and is then indented before being written down.

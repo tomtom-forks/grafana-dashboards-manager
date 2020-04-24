@@ -16,8 +16,8 @@ import (
 
 var (
 	deleteRemoved = flag.Bool("delete-removed", false, "For each file removed from Git, delete the corresponding dashboard on the Grafana API")
-	pushAll = flag.Bool("push-all", false, "Force push all files, then quit")
-	singleShot = flag.Bool("single-shot", false, "Run once, then quit")
+	pushAll       = flag.Bool("push-all", false, "Force push all files, then quit")
+	singleShot    = flag.Bool("single-shot", false, "Run once, then quit")
 )
 
 func main() {
@@ -64,7 +64,7 @@ func main() {
 			"dashboardFiles": dashboardFiles,
 			//	"dashboardContents": dashboardContents,
 			"fileVersionFile": fileVersionFile,
-			"error": err,
+			"error":           err,
 		}).Info("About to")
 
 		folderFiles, folderContents, err := grafana.LoadFilesFromDirectory(cfg, syncPath, "/folders")
@@ -76,7 +76,8 @@ func main() {
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error": err,
-			}).Error("Failed to get grafana meta data")		}
+			}).Error("Failed to get grafana meta data")
+		}
 
 		grafana.Push(cfg, fileVersionFile, grafanaVersionFile, dashboardFiles, dashboardContents, grafanaClient)
 

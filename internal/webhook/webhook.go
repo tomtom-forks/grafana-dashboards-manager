@@ -4,8 +4,8 @@ import (
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/git"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana"
-	"github.com/bruce34/grafana-dashboards-manager/internal/puller"
 	"github.com/bruce34/grafana-dashboards-manager/internal/poller"
+	"github.com/bruce34/grafana-dashboards-manager/internal/puller"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/go-playground/webhooks.v3"
@@ -168,4 +168,3 @@ func HandlePush(payload interface{}, header webhooks.Header) {
 		}).Error("Call to puller returned an error")
 	}
 }
-

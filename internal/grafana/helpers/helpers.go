@@ -20,4 +20,3 @@ func GetSlug(dbJSONDescription []byte) (dbSlug string, err error) {
 	dbSlug = slug.Make(thingTitle.Title)
 	return
 }
-

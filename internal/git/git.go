@@ -161,7 +161,7 @@ func (r *Repository) Log(fromHash string) (object.CommitIter, error) {
 
 	return r.Repo.Log(&gogit.LogOptions{
 		From: hash,
-//		Order: gogit.LogOrderCommitterTime,
+		//		Order: gogit.LogOrderCommitterTime,
 	})
 }
 

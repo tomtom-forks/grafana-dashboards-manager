@@ -25,8 +25,8 @@ func FilterIgnored(
 			max = 20
 		}
 		logrus.WithFields(logrus.Fields{
-			"filename":    filename,
-			"content":	string(content[:max]),
+			"filename": filename,
+			"content":  string(content[:max]),
 		}).Info("Checking whether to ignore")
 		// Don't set versions.json to be pushed
 		if strings.HasSuffix(filename, "versions-metadata.json") {
@@ -58,12 +58,12 @@ func FolderIDFromFolderUID(versionsFile VersionFile, folderUID string) (folderID
 	}).Debug("Checking folders by meta ID")
 	for _, f := range versionsFile.FoldersMetaByUID {
 		logrus.WithFields(logrus.Fields{
-			"ID": f.ID,
+			"ID":        f.ID,
 			"folderUID": f.UID,
 		}).Debug("Checking ")
 		if folderUID == f.UID {
 			logrus.WithFields(logrus.Fields{
-				"ID": f.ID,
+				"ID":        f.ID,
 				"folderUID": f.UID,
 			}).Debug("Found")
 			folderID = f.ID
@@ -76,6 +76,7 @@ func FolderIDFromFolderUID(versionsFile VersionFile, folderUID string) (folderID
 	}
 	return
 }
+
 // PushFiles takes a slice of files' names and a map mapping a file's name to its
 // content, and iterates over the first slice. For each file name, it will push
 // to Grafana the content from the map that matches the name, as a creation or
@@ -98,8 +99,8 @@ func PushFiles(filenames []string, contents map[string][]byte, versionsFile Vers
 			err = json.Unmarshal(contents[filename], &fld)
 			folderUID := fld.FolderUID
 			logrus.WithFields(logrus.Fields{
-				"folderUID":    folderUID,
-				"filename": filename,
+				"folderUID": folderUID,
+				"filename":  filename,
 			}).Info("Grafana: Create/Upload folderUID")
 
 			folderID = FolderIDFromFolderUID(grafanaVersionFile, folderUID)
@@ -110,7 +111,7 @@ func PushFiles(filenames []string, contents map[string][]byte, versionsFile Vers
 			}).Error("Failed to find title")
 		}
 		logrus.WithFields(logrus.Fields{
-			"folderID":    folderID,
+			"folderID": folderID,
 			"filename": filename,
 		}).Info("Grafana: Create/Upload folderID")
 		if err := client.CreateOrUpdateDashboard(contents[filename], folderID); err != nil {
@@ -200,7 +201,7 @@ func isIgnored(dashboardJSON []byte, cfg *config.Config) (bool, error) {
 	return false, nil
 }
 
-func Push(cfg *config.Config, fileVersionFile VersionFile, grafanaVersionFile VersionFile, files []string, contents map[string][]byte, client *Client) (err error){
+func Push(cfg *config.Config, fileVersionFile VersionFile, grafanaVersionFile VersionFile, files []string, contents map[string][]byte, client *Client) (err error) {
 	// Filter out all files that are supposed to be ignored by the
 	// dashboard manager.
 	if err = FilterIgnored(&contents, cfg); err != nil {
@@ -212,7 +213,6 @@ func Push(cfg *config.Config, fileVersionFile VersionFile, grafanaVersionFile Ve
 	PushFiles(files, contents, fileVersionFile, grafanaVersionFile, client)
 	return
 }
-
 
 // getFilesContents takes a slice of files' names and a map mapping a file's name
 // to its content and appends to it the current content of all of the files for
@@ -237,8 +237,7 @@ func GetFilesContents(
 	return
 }
 
-
-func LoadFilesFromDirectory(cfg *config.Config, dir string, subdir string) (filenames []string, contents map[string][]byte, err error){
+func LoadFilesFromDirectory(cfg *config.Config, dir string, subdir string) (filenames []string, contents map[string][]byte, err error) {
 	filenames = make([]string, 0)
 	contents = make(map[string][]byte)
 	files, err := ioutil.ReadDir(filepath.Join(dir, subdir))
