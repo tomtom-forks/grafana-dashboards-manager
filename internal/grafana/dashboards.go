@@ -12,15 +12,15 @@ import (
 // DbSearchResponse represents an element of the response to a dashboard search
 // query
 type DbSearchResponse struct {
-	ID      int      `json:"id"`
-	Title   string   `json:"title"`
-	URI     string   `json:"uri"`
-	Type    string   `json:"type"`
-	Tags    []string `json:"tags"`
-	Starred bool     `json:"isStarred"`
-	UID     string   `json:"uid"`
-	FolderUID string `json:"folderUid,omitEmpty"`
-	FolderID int     `json:"folderId,omitEmpty"`
+	ID        int      `json:"id"`
+	Title     string   `json:"title"`
+	URI       string   `json:"uri"`
+	Type      string   `json:"type"`
+	Tags      []string `json:"tags"`
+	Starred   bool     `json:"isStarred"`
+	UID       string   `json:"uid"`
+	FolderUID string   `json:"folderUid,omitEmpty"`
+	FolderID  int      `json:"folderId,omitEmpty"`
 }
 
 // dbCreateOrUpdateRequest represents the request sent to create or update a
@@ -51,25 +51,24 @@ type Dashboard struct {
 }
 
 type Folder struct {
-	Title string `json:"title"`
-	UID   string `json:"uid"`
-	URI     string   `json:"uri"`
-	Tags    []string `json:"tags"`
-	Starred bool     `json:"isStarred"`
-	FolderUID string `json:"folderUid,omitEmpty"`
+	Title     string   `json:"title"`
+	UID       string   `json:"uid"`
+	URI       string   `json:"uri"`
+	Tags      []string `json:"tags"`
+	Starred   bool     `json:"isStarred"`
+	FolderUID string   `json:"folderUid,omitEmpty"`
 }
 
 type DashboardVersion struct {
-	Meta	DbSearchResponse
-
+	Meta DbSearchResponse
 }
 
 type VersionFile struct {
-	DashboardMetaByTitle   map[string]DbSearchResponse `json:"dashboardMetaByTitle"`
-	DashboardMetaBySlug    map[string]DbSearchResponse `json:"dashboardMetaBySlug"`
-	DashboardBySlug        map[string]*Dashboard       `json:"-"`
+	DashboardMetaByTitle map[string]DbSearchResponse `json:"dashboardMetaByTitle"`
+	DashboardMetaBySlug  map[string]DbSearchResponse `json:"dashboardMetaBySlug"`
+	DashboardBySlug      map[string]*Dashboard       `json:"-"`
 
-	FoldersMetaByUID        map[string]DbSearchResponse `json:"foldersMetaByUID"`
+	FoldersMetaByUID       map[string]DbSearchResponse `json:"foldersMetaByUID"`
 	DashboardVersionBySlug map[string]int              `json:"dashboardVersionBySlug"`
 }
 
@@ -122,8 +121,8 @@ func (d *Dashboard) setDashboardNameFromRawJSON() (err error) {
 // response body.
 func (c *Client) GetDashboardsURIs() (URIs []string, dashboardMetaBySlug map[string]DbSearchResponse, FoldersMetaByUID map[string]DbSearchResponse, Folders []DbSearchResponse, err error) {
 
-	FoldersMetaByUID = make(map[string]DbSearchResponse,0)
-	dashboardMetaBySlug = make(map[string]DbSearchResponse,0)
+	FoldersMetaByUID = make(map[string]DbSearchResponse, 0)
+	dashboardMetaBySlug = make(map[string]DbSearchResponse, 0)
 
 	resp, err := c.request("GET", "search", nil)
 	if err != nil {
@@ -192,7 +191,7 @@ func (c *Client) CreateOrUpdateDashboard(contentJSON []byte, folderID int) (err 
 	reqBody := dbCreateOrUpdateRequest{
 		Dashboard: rawJSON(contentJSON),
 		Overwrite: true,
-		FolderID: folderID,
+		FolderID:  folderID,
 	}
 
 	// Generate the request body's JSON
@@ -210,9 +209,9 @@ func (c *Client) CreateOrUpdateDashboard(contentJSON []byte, folderID int) (err 
 
 	reqBodyJSON, err = json.Marshal(v)
 	logrus.WithFields(logrus.Fields{
-//		"reqBodyJson":    string(reqBodyJSON),
+		//		"reqBodyJson":    string(reqBodyJSON),
 		"err2": err2,
-		"idv": idv,
+		"idv":  idv,
 		"idv1": idv1,
 		"err3": err3,
 	}).Info("Removed??")

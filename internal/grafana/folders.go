@@ -8,21 +8,20 @@ import (
 // folderCreateOrUpdateRequest represents the request sent to create or update a
 // folder
 type folderCreateOrUpdateRequest struct {
-	Uid string `json:"uid"`
-	Title string   `json:"title"`
-	Overwrite bool `json:"overwrite,omitempty"`
-
+	Uid       string `json:"uid"`
+	Title     string `json:"title"`
+	Overwrite bool   `json:"overwrite,omitempty"`
 }
 
-func (c *Client) CreateFolders(folders []string, contents map[string][]byte) (err error){
+func (c *Client) CreateFolders(folders []string, contents map[string][]byte) (err error) {
 	logrus.Info("Create folders")
 
-	for _, folderName:= range folders {
+	for _, folderName := range folders {
 		var folder Folder
 		err = json.Unmarshal(contents[folderName], &folder)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
-				"error": err,
+				"error":    err,
 				"contents": string(contents[folderName]),
 			}).Info("Unable to unmarshall folder")
 		}
@@ -50,8 +49,8 @@ func (c *Client) CreateFolders(folders []string, contents map[string][]byte) (er
 // the request or decoding the response's body.
 func (c *Client) CreateOrUpdateFolder(title string, uid string) (err error) {
 	reqBody := folderCreateOrUpdateRequest{
-		Title: title,
-		Uid: uid,
+		Title:     title,
+		Uid:       uid,
 		Overwrite: true,
 	}
 	// Generate the request body's JSON
@@ -75,4 +74,3 @@ func (c *Client) DeleteFolder(uid string) (err error) {
 	_, err = c.request("DELETE", "dashboards/db/"+uid, nil)
 	return
 }
-

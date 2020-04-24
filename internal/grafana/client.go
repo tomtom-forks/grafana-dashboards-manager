@@ -35,7 +35,6 @@ func NewClient(baseURL string, apiKey string, username string, password string) 
 		Username:   username,
 		Password:   password,
 		httpClient: new(http.Client),
-
 	}
 }
 

@@ -67,7 +67,7 @@ func poller(
 		return
 	}
 
-	var filesContents  map[string][]byte
+	var filesContents map[string][]byte
 	filesContents, err = repo.GetFilesContentsAtCommit(latestCommit)
 	if err != nil {
 		return
@@ -203,7 +203,7 @@ func mergeContents(
 	return
 }
 
-func SeparateDashboardsFolders(modified []string) (dashboardsModified []string, foldersModified []string){
+func SeparateDashboardsFolders(modified []string) (dashboardsModified []string, foldersModified []string) {
 	foldersModified = make([]string, 0)
 	dashboardsModified = make([]string, 0)
 	for _, o := range modified {
@@ -213,7 +213,7 @@ func SeparateDashboardsFolders(modified []string) (dashboardsModified []string, 
 			foldersModified = append(foldersModified, o)
 		} else {
 			logrus.WithFields(logrus.Fields{
-				"filename":      o,
+				"filename": o,
 			}).Info("Ignoring unknown changed file")
 		}
 	}

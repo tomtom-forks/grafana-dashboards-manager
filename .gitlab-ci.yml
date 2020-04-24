@@ -1,0 +1,57 @@
+image: 817035293158.dkr.ecr.us-east-1.amazonaws.com/movableink/golang-1.14-bionic:latest
+
+stages:
+  - build
+  - upload
+
+cache:
+  key: grafana-dashboards-manager
+  paths:
+    - .cache
+
+variables:
+  GOOS: linux
+  S3_BUCKET_NAME: movableink-apps
+
+.prep_go: &prep_go
+  - mkdir -p .cache
+  - export GOPATH="${CI_PROJECT_DIR}/.cache"
+  - go get ./...
+
+go_build:
+  stage: build
+  before_script:
+    - *prep_go
+  script:
+    - make
+  artifacts:
+    paths:
+      - bin
+    expire_in: 1 day
+
+push_to_s3:
+  stage: upload
+  image: python:latest
+  script:
+    - pip install awscli
+    - aws s3 cp --acl private bin/ s3://$S3_BUCKET_NAME/binaries/grafana-dashboards-manager/${CI_COMMIT_SHA} --recursive
+
+.docker_base: &docker_base
+  stage: upload
+  image:
+    name: "gcr.io/kaniko-project/executor:debug"
+    entrypoint: [""]
+  cache: {}
+  script:
+    - 'echo "{ \"credsStore\": \"ecr-login\" }" > /kaniko/.docker/config.json'
+    - /kaniko/executor --context=$CI_PROJECT_DIR --dockerfile=$CI_PROJECT_DIR/Dockerfile --destination=$DOCKER_REPO:$CI_COMMIT_SHA --destination=$DOCKER_REPO:latest
+
+.docker_base_vars: &docker_base_vars
+  AWS_EC2_METADATA_DISABLED: "true"
+  AWS_SDK_LOAD_CONFIG: "true"
+  DOCKER_REPO: 817035293158.dkr.ecr.us-east-1.amazonaws.com/movableink/grafana-dashboards-manager
+
+docker:
+  <<: *docker_base
+  variables:
+    <<: *docker_base_vars

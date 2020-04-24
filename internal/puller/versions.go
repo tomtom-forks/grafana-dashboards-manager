@@ -14,9 +14,8 @@ import (
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 )
 
-
 func getVersionsFile(prefix string) (filename string) {
-	if (prefix == "hostname") {
+	if prefix == "hostname" {
 		hostname, _ := os.Hostname()
 		return hostname + "-" + "versions-metadata.json"
 	}
@@ -31,10 +30,10 @@ func getVersionsFile(prefix string) (filename string) {
 func GetDashboardsVersions(clonePath string, versionsFile string) (versions grafana.VersionFile, err error) {
 
 	versions = grafana.VersionFile{
-		DashboardMetaBySlug: make(map[string]grafana.DbSearchResponse,0),
-		DashboardBySlug: make(map[string]*grafana.Dashboard, 0),
-		FoldersMetaByUID: make(map[string]grafana.DbSearchResponse, 0),
-		DashboardVersionBySlug: make(map[string]int,0),
+		DashboardMetaBySlug:    make(map[string]grafana.DbSearchResponse, 0),
+		DashboardBySlug:        make(map[string]*grafana.Dashboard, 0),
+		FoldersMetaByUID:       make(map[string]grafana.DbSearchResponse, 0),
+		DashboardVersionBySlug: make(map[string]int, 0),
 	}
 
 	filename := clonePath + "/" + getVersionsFile(versionsFile)
@@ -84,7 +83,7 @@ func createFoldersFromMetaData(foldersMetaByUID map[string]grafana.DbSearchRespo
 	for _, folder := range foldersMetaByUID {
 		folders[folder.UID] = grafana.Folder{
 			Title: folder.Title,
-			UID: folder.UID,
+			UID:   folder.UID,
 		}
 	}
 	return

@@ -44,15 +44,15 @@ type SimpleSyncSettings struct {
 
 // GitSettings contains the data required to interact with the Git repository.
 type GitSettings struct {
-	URL                string              `yaml:"url"`
-	User               string              `yaml:"user"`
-	PrivateKeyPath     string              `yaml:"private_key"`
-	ClonePath          string              `yaml:"clone_path"`
-	CommitsAuthor      CommitsAuthorConfig `yaml:"commits_author"`
-	DontPush           bool                `yaml:"dont_push"`
-	DontCommit         bool                `yaml:"dont_commit"`
-	VersionsFilePrefix string              `yaml:"versions_file_prefix"`
-	ApplyManagerCommits bool               `yaml:"apply_manager_commits"`
+	URL                 string              `yaml:"url"`
+	User                string              `yaml:"user"`
+	PrivateKeyPath      string              `yaml:"private_key"`
+	ClonePath           string              `yaml:"clone_path"`
+	CommitsAuthor       CommitsAuthorConfig `yaml:"commits_author"`
+	DontPush            bool                `yaml:"dont_push"`
+	DontCommit          bool                `yaml:"dont_commit"`
+	VersionsFilePrefix  string              `yaml:"versions_file_prefix"`
+	ApplyManagerCommits bool                `yaml:"apply_manager_commits"`
 }
 
 // CommitsAuthorConfig contains the configuration (name + email address) to use
