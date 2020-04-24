@@ -21,7 +21,6 @@ variables:
 go_build:
   stage: build
   before_script:
-    - *setup_netrc
     - *prep_go
   script:
     - make
