@@ -11,6 +11,6 @@ ADD bin/puller /
 ADD bin/pusher /
 ADD run-pull-push.sh /run.sh
 
-RUN chown 65534:65534 /puller && chown 65534:65534 /pusher && chown 65534:65534 /run.sh
+RUN chown 65534:65534 /puller && chown 65534:65534 /pusher && chown 65534:65534 /run.sh && chmod +x /run.sh
 
 CMD ["/run.sh"]
