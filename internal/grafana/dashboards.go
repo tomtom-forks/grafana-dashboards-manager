@@ -116,7 +116,7 @@ func (d *Dashboard) setDashboardNameFromRawJSON() (err error) {
 }
 
 // GetDashboardsURIs requests the Grafana API for the list of all dashboards,
-// then returns the dashboards' URIs. An URI will look like "db/[dashboard slug]".
+// then returns the dashboards' URIs. An URI will look like "uid/[UID]".
 // Returns an error if there was an issue requesting the URIs or parsing the
 // response body.
 func (c *Client) GetDashboardsURIs() (URIs []string, dashboardMetaBySlug map[string]DbSearchResponse, FoldersMetaByUID map[string]DbSearchResponse, Folders []DbSearchResponse, err error) {
@@ -144,7 +144,7 @@ func (c *Client) GetDashboardsURIs() (URIs []string, dashboardMetaBySlug map[str
 
 	for _, db := range respBody {
 		if db.Type == "dash-db" {
-			URIs = append(URIs, db.URI)
+			URIs = append(URIs, "uid/"+db.UID)
 			dashboardMetaBySlug[string(db.Title)] = db
 			logrus.WithFields(logrus.Fields{
 				"db": db,
