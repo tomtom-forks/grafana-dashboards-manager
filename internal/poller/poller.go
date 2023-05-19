@@ -120,13 +120,16 @@ func poller(
 			mergedContents := mergeContents(modified, removed, filesContents, previousFilesContents)
 
 			// Separate out dashboards and folders
-			dashboardsModified, foldersModified := SeparateDashboardsFolders(modified)
-			dashboardsRemoved, _ := SeparateDashboardsFolders(removed)
+			dashboardsModified, foldersModified, librariesModified := SeparateDashboardsFoldersLibraries(modified)
+			dashboardsRemoved, _, librariesRemoved := SeparateDashboardsFoldersLibraries(removed)
+
+			_ = librariesModified
+			_ = librariesRemoved
 
 			// Load versions
 			logrus.Info("Getting local dashboard versions")
 			syncPath := puller.SyncPath(cfg)
-			fileVersionFile, err := puller.GetDashboardsVersions(syncPath, cfg.Git.VersionsFilePrefix)
+			fileVersionFile, _, err := puller.GetDefinitionsFromDisc(syncPath, cfg.Git.VersionsFilePrefix)
 			if err != nil {
 				logrus.Error("Failed to get dashboard versions from local file system")
 				return err
@@ -134,17 +137,19 @@ func poller(
 			// ensure all folders are created
 			client.CreateFolders(foldersModified, mergedContents)
 			// cowardly not deleting folders as they may delete all dashboards underneath them
-			var grafanaVersionFile grafana.VersionFile
-			_, grafanaVersionFile, err = puller.GetGrafanaFileVersion(client, cfg)
+			var grafanaVersionFile grafana.DefsFile
+			_, grafanaVersionFile, err = puller.GetDefinitionsFromGrafanaAPI(client, cfg)
 
 			// If the user requested it, delete all dashboards that were removed
 			// from the repository. Delete before adding new ones in case of rename.
 			if delRemoved {
 				grafana.DeleteDashboards(dashboardsRemoved, mergedContents, client)
+				grafana.DeleteLibraries(librariesRemoved, mergedContents, client)
 			}
 
 			// Push the contents of the files that were added or modified to the
 			// Grafana API.
+			grafana.PushLibraryFiles(librariesModified, mergedContents, fileVersionFile, grafanaVersionFile, client)
 			grafana.Push(cfg, fileVersionFile, grafanaVersionFile, dashboardsModified, mergedContents, client)
 
 			// Grafana will auto-update the version number after we pushed the new
@@ -203,7 +208,7 @@ func mergeContents(
 	return
 }
 
-func SeparateDashboardsFolders(modified []string) (dashboardsModified []string, foldersModified []string) {
+func SeparateDashboardsFoldersLibraries(modified []string) (dashboardsModified []string, foldersModified []string, librariesModified []string) {
 	foldersModified = make([]string, 0)
 	dashboardsModified = make([]string, 0)
 	for _, o := range modified {
@@ -211,6 +216,8 @@ func SeparateDashboardsFolders(modified []string) (dashboardsModified []string, 
 			dashboardsModified = append(dashboardsModified, o)
 		} else if strings.HasPrefix(o, "folders") {
 			foldersModified = append(foldersModified, o)
+		} else if strings.HasPrefix(o, "libraries") {
+			librariesModified = append(librariesModified, o)
 		} else {
 			logrus.WithFields(logrus.Fields{
 				"filename": o,

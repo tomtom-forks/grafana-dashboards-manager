@@ -2,7 +2,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"github.com/bruce34/grafana-dashboards-manager/internal/puller"
+	"github.com/bruce34/grafana-dashboards-manager/internal/utils"
+	"github.com/pkg/errors"
 	"os"
 
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
@@ -20,16 +23,46 @@ var (
 	singleShot    = flag.Bool("single-shot", false, "Run once, then quit")
 )
 
+type StacktraceHook struct {
+}
+
+func (h *StacktraceHook) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
+
+func (h *StacktraceHook) Fire(e *logrus.Entry) error {
+	if v, found := e.Data[logrus.ErrorKey]; found {
+		if err, iserr := v.(error); iserr {
+			type stackTracer interface {
+				StackTrace() errors.StackTrace
+			}
+			if st, isst := err.(stackTracer); isst {
+				stack := fmt.Sprintf("%+v", st.StackTrace())
+				e.Data["stacktrace"] = stack
+			}
+		}
+	}
+	return nil
+}
+
 func main() {
 	var err error
 
 	// Define this flag in the main function because else it would cause a
 	// conflict with the one in the puller.
 	configFile := flag.String("config", "config.yaml", "Path to the configuration file")
+	version := flag.Bool("version", false, "Print version info and exit")
 	flag.Parse()
 
 	// Load the logger's configuration.
 	logger.LogConfig()
+	logrus.SetFormatter(&logrus.TextFormatter{DisableQuote: true})
+	logrus.AddHook(&StacktraceHook{})
+
+	if *version {
+		fmt.Printf("BuildInfo: %v", utils.BuildInfoString())
+		os.Exit(0)
+	}
 
 	// Load the configuration.
 	cfg, err := config.Load(*configFile)
@@ -47,14 +80,27 @@ func main() {
 
 	if *pushAll {
 		syncPath := puller.SyncPath(cfg)
+
+		folderFiles, folderContents, err := grafana.LoadFilesFromDirectory(cfg, syncPath, "/folders")
+
+		// ensure all folders are created before we query for them
+		grafanaClient.CreateFolders(folderFiles, folderContents)
+		var grafanaVersionFile grafana.DefsFile
+		_, grafanaVersionFile, err = puller.GetDefinitionsFromGrafanaAPI(grafanaClient, cfg)
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error": err,
+			}).Error("Failed to get grafana meta data")
+		}
+
 		dashboardFiles, dashboardContents, err := grafana.LoadFilesFromDirectory(cfg, syncPath, "/dashboards")
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error": err,
 			}).Warn("Unable to push all files")
 		}
-		var fileVersionFile grafana.VersionFile
-		fileVersionFile, err = puller.GetDashboardsVersions(syncPath, cfg.Git.VersionsFilePrefix)
+		var fileVersionFile grafana.DefsFile
+		fileVersionFile, _, err = puller.GetDefinitionsFromDisc(syncPath, cfg.Git.VersionsFilePrefix)
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error": err,
@@ -65,20 +111,16 @@ func main() {
 			//	"dashboardContents": dashboardContents,
 			"fileVersionFile": fileVersionFile,
 			"error":           err,
-		}).Info("About to")
+		}).Info("About to load dashboards")
 
-		folderFiles, folderContents, err := grafana.LoadFilesFromDirectory(cfg, syncPath, "/folders")
-
-		// ensure all folders are created before we query for them
-		grafanaClient.CreateFolders(folderFiles, folderContents)
-		var grafanaVersionFile grafana.VersionFile
-		_, grafanaVersionFile, err = puller.GetGrafanaFileVersion(grafanaClient, cfg)
+		libraryFiles, libraryContents, err := grafana.LoadFilesFromDirectory(cfg, syncPath, "/libraries")
 		if err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error": err,
-			}).Error("Failed to get grafana meta data")
+			}).Info("Unable to read libraries metadata file. Perhaps no libraries have been defined? If so, all good.")
 		}
 
+		grafana.PushLibraryFiles(libraryFiles, libraryContents, fileVersionFile, grafanaVersionFile, grafanaClient)
 		grafana.Push(cfg, fileVersionFile, grafanaVersionFile, dashboardFiles, dashboardContents, grafanaClient)
 
 		os.Exit(0)

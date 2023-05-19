@@ -3,7 +3,6 @@ package puller
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"time"
 
@@ -22,35 +21,52 @@ func getVersionsFile(prefix string) (filename string) {
 	return prefix + "versions-metadata.json"
 }
 
-// getDashboardsVersions reads the "versions.json" file at the root of the git
+// GetDefinitionsFromDisc reads the "versions.json" file at the root of the git
 // repository and returns its content as a map.
 // If the file doesn't exist, returns an empty map.
 // Return an error if there was an issue looking for the file (except when the
 // file doesn't exist), reading it or formatting its content into a map.
-func GetDashboardsVersions(clonePath string, versionsFile string) (versions grafana.VersionFile, err error) {
+func GetDefinitionsFromDisc(clonePath string, versionsFile string) (versions grafana.DefsFile, oldSlugs []string, err error) {
 
-	versions = grafana.VersionFile{
-		DashboardMetaBySlug:    make(map[string]grafana.DbSearchResponse, 0),
-		DashboardBySlug:        make(map[string]*grafana.Dashboard, 0),
-		FoldersMetaByUID:       make(map[string]grafana.DbSearchResponse, 0),
-		DashboardVersionBySlug: make(map[string]int, 0),
+	type migrationDef struct {
+		grafana.DefsFile
+		DashboardMetaByTitle   map[string]grafana.DbSearchResponse `json:"dashboardMetaByTitle"`
+		DashboardVersionBySlug map[string]int                      `json:"dashboardVersionBySlug"`
 	}
+	m := migrationDef{}
+	m.DashboardMetaByTitle = make(map[string]grafana.DbSearchResponse, 0)
+	m.DashboardMetaBySlug = make(map[string]grafana.DbSearchResponse, 0)
+	m.DashboardBySlug = make(map[string]*grafana.Dashboard, 0)
+	m.FoldersMetaByUID = make(map[string]grafana.DbSearchResponse, 0)
+	m.LibraryMetaByUID = make(map[string]grafana.LibraryElementResponse, 0)
+	m.LibraryByUID = make(map[string]*grafana.Library, 0)
+	m.DashboardVersionByUID = make(map[string]int, 0)
+	m.LibraryVersionByUID = make(map[string]int, 0)
 
 	filename := clonePath + "/" + getVersionsFile(versionsFile)
 
 	_, err = os.Stat(filename)
 	if os.IsNotExist(err) {
-		return versions, nil
+		return versions, []string{}, nil
 	}
 
-	data, err := ioutil.ReadFile(filename)
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		return
 	}
 
-	if err = json.Unmarshal(data, &versions); err != nil {
+	if err = json.Unmarshal(data, &m); err != nil {
 		return
 	}
+	// must require a migration
+	if len(m.DashboardVersionBySlug) > 0 {
+		for slug, _ := range m.DashboardMetaByTitle { // byTitle was the same as slug, d.Title
+			oldSlugs = append(oldSlugs, slug)
+		}
+	}
+	// copy over what we require
+	versionsJSON, _ := json.Marshal(m)
+	_ = json.Unmarshal(versionsJSON, &versions)
 	return
 }
 
@@ -62,7 +78,7 @@ func GetDashboardsVersions(clonePath string, versionsFile string) (versions graf
 // "versions.json" file.
 // Returns an error if there was an issue when conerting to JSON, indenting or
 // writing on disk.
-func writeVersions(versions grafana.VersionFile, dv map[string]diffVersion, clonePath string, versionsFile string,
+func writeVersions(versions grafana.DefsFile, dv map[string]diffVersion, clonePath string, versionsFile string,
 ) (err error) {
 	rawJSON, err := json.Marshal(versions)
 	if err != nil {
@@ -83,7 +99,7 @@ func writeVersions(versions grafana.VersionFile, dv map[string]diffVersion, clon
 // file that it creates (with writeVersions) and add to the index.
 // Returns an error if there was an issue when creating the "versions.json"
 // file, adding it to the index or creating the commit.
-func commitNewVersions(versions grafana.VersionFile, dv map[string]diffVersion, worktree *gogit.Worktree,
+func commitNewVersions(versions grafana.DefsFile, dv map[string]diffVersion, worktree *gogit.Worktree,
 	cfg *config.Config,
 ) (err error) {
 	if err = writeVersions(versions, dv, cfg.Git.ClonePath, cfg.Git.VersionsFilePrefix); err != nil {

@@ -2,11 +2,11 @@ package grafana
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
-	"crypto/tls"
 
 	"github.com/sirupsen/logrus"
 )
@@ -52,7 +52,7 @@ func NewClient(baseURL string, apiKey string, username string, password string, 
 // Returns an error if there was an issue initialising the request, performing
 // it or reading the response body. Also returns an error on non-200 response
 // status codes. If the status code is 404, a standard error is returned, if the
-// status code is neither 200 nor 404 an error of type httpUnkownError is
+// status code is neither 200 nor 404 an error of type httpUnknownError is
 // returned.
 func (c *Client) request(method string, endpoint string, body []byte) ([]byte, error) {
 	route := "/api/" + endpoint
@@ -97,7 +97,7 @@ func (c *Client) request(method string, endpoint string, body []byte) ([]byte, e
 	}).Info("Grafana API response")
 
 	// Read the response body
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -109,33 +109,33 @@ func (c *Client) request(method string, endpoint string, body []byte) ([]byte, e
 		if resp.StatusCode == http.StatusNotFound {
 			err = fmt.Errorf("%s not found (404)", url)
 		} else {
-			// Return an httpUnkownError error if the status code is neither 200
+			// Return an httpUnknownError error if the status code is neither 200
 			// nor 404
 			err = newHttpUnknownError(resp.StatusCode)
 		}
 	}
 
 	// Return the response body along with the error. This allows callers to
-	// process httpUnkownError errors by displaying an error message located in
+	// process httpUnknownError errors by displaying an error message located in
 	// the response body along with the data contained in the error.
 	return respBody, err
 }
 
-// httpUnkownError represents an HTTP error, created from an HTTP response where
+// httpUnknownError represents an HTTP error, created from an HTTP response where
 // the status code is neither 200 nor 404.
-type httpUnkownError struct {
+type httpUnknownError struct {
 	StatusCode int
 }
 
-// newHttpUnknownError creates and returns a new httpUnkownError error using
+// newHttpUnknownError creates and returns a new httpUnknownError error using
 // the provided status code.
-func newHttpUnknownError(statusCode int) *httpUnkownError {
-	return &httpUnkownError{
+func newHttpUnknownError(statusCode int) *httpUnknownError {
+	return &httpUnknownError{
 		StatusCode: statusCode,
 	}
 }
 
 // Error implements error.Error().
-func (e *httpUnkownError) Error() string {
+func (e *httpUnknownError) Error() string {
 	return fmt.Sprintf("Unknown HTTP error: %d", e.StatusCode)
 }

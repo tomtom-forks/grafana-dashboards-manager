@@ -136,25 +136,29 @@ func HandlePush(payload interface{}, header webhooks.Header) {
 		return
 	}
 
-	dashboardsAdded, foldersAdded := poller.SeparateDashboardsFolders(added)
-	dashboardsModified, foldersModified := poller.SeparateDashboardsFolders(modified)
-	dashboardsRemoved, _ := poller.SeparateDashboardsFolders(removed)
+	dashboardsAdded, foldersAdded, librariesAdded := poller.SeparateDashboardsFoldersLibraries(added)
+	dashboardsModified, foldersModified, librariesModified := poller.SeparateDashboardsFoldersLibraries(modified)
+	dashboardsRemoved, _, librariesRemoved := poller.SeparateDashboardsFoldersLibraries(removed)
 
 	syncPath := puller.SyncPath(cfg)
-	fileVersionFile, err := puller.GetDashboardsVersions(syncPath, cfg.Git.VersionsFilePrefix)
+	fileVersionFile, _, err := puller.GetDefinitionsFromDisc(syncPath, cfg.Git.VersionsFilePrefix)
 	grafanaClient.CreateFolders(append(foldersAdded, foldersModified...), contents)
 
-	var grafanaVersionFile grafana.VersionFile
-	_, grafanaVersionFile, err = puller.GetGrafanaFileVersion(grafanaClient, cfg)
+	var grafanaVersionFile grafana.DefsFile
+	_, grafanaVersionFile, err = puller.GetDefinitionsFromGrafanaAPI(grafanaClient, cfg)
 
 	// Push all added and modified dashboards to Grafana
-	grafana.PushFiles(dashboardsAdded, contents, fileVersionFile, grafanaVersionFile, grafanaClient)
-	grafana.PushFiles(dashboardsModified, contents, fileVersionFile, grafanaVersionFile, grafanaClient)
+	grafana.PushLibraryFiles(librariesAdded, contents, fileVersionFile, grafanaVersionFile, grafanaClient)
+	grafana.PushLibraryFiles(librariesModified, contents, fileVersionFile, grafanaVersionFile, grafanaClient)
+
+	grafana.PushDashboardFiles(dashboardsAdded, contents, fileVersionFile, grafanaVersionFile, grafanaClient)
+	grafana.PushDashboardFiles(dashboardsModified, contents, fileVersionFile, grafanaVersionFile, grafanaClient)
 
 	// If the user requested it, delete all dashboards that were removed
 	// from the repository.
 	if deleteRemoved {
 		grafana.DeleteDashboards(dashboardsRemoved, contents, grafanaClient)
+		grafana.DeleteLibraries(librariesRemoved, contents, grafanaClient)
 	}
 
 	// Grafana will auto-update the version number after we pushed the new

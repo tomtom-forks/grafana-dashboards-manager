@@ -5,6 +5,7 @@ import (
 	"github.com/bruce34/grafana-dashboards-manager/internal/config"
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana/helpers"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -21,13 +22,13 @@ func FilterIgnored(
 ) (err error) {
 	for filename, content := range *filesToPush {
 		max := len(content)
-		if max > 20 {
-			max = 20
+		if max > 40 {
+			max = 40
 		}
 		logrus.WithFields(logrus.Fields{
 			"filename": filename,
 			"content":  string(content[:max]),
-		}).Info("Checking whether to ignore")
+		}).Debug("Checking whether to ignore")
 		// Don't set versions.json to be pushed
 		if strings.HasSuffix(filename, "versions-metadata.json") {
 			delete(*filesToPush, filename)
@@ -52,58 +53,30 @@ func FilterIgnored(
 	return
 }
 
-func FolderIDFromFolderUID(versionsFile VersionFile, folderUID string) (folderID int) {
-	logrus.WithFields(logrus.Fields{
-		"folderUID": folderUID,
-	}).Debug("Checking folders by meta ID")
-	for _, f := range versionsFile.FoldersMetaByUID {
-		logrus.WithFields(logrus.Fields{
-			"ID":        f.ID,
-			"folderUID": f.UID,
-		}).Debug("Checking ")
-		if folderUID == f.UID {
-			logrus.WithFields(logrus.Fields{
-				"ID":        f.ID,
-				"folderUID": f.UID,
-			}).Debug("Found")
-			folderID = f.ID
-		}
-	}
-	if folderUID != "" {
-		logrus.WithFields(logrus.Fields{
-			"folderUID": folderUID,
-		}).Warn("Failed to find folderUID")
-	}
-	return
-}
-
-// PushFiles takes a slice of files' names and a map mapping a file's name to its
+// PushDashboardFiles takes a slice of files' names and a map mapping a file's name to its
 // content, and iterates over the first slice. For each file name, it will push
 // to Grafana the content from the map that matches the name, as a creation or
 // an update of an existing dashboard.
 // Logs any errors encountered during an iteration, but doesn't return until all
 // creation and/or update requests have been performed.
-func PushFiles(filenames []string, contents map[string][]byte, versionsFile VersionFile, grafanaVersionFile VersionFile, client *Client) {
+func PushDashboardFiles(filenames []string, contents map[string][]byte, versionsFile DefsFile, grafanaVersionFile DefsFile, client *Client) {
 	// Push all files to the Grafana API
 	for _, filename := range filenames {
 		_, err := helpers.GetSlug(contents[filename])
-		folderID := 0
+		folderUID := ""
 		if _, ok := contents[filename]; !ok {
 			continue
 		}
-
 		if err == nil {
 			var fld struct {
 				FolderUID string `json:"__folderUID"`
 			}
 			err = json.Unmarshal(contents[filename], &fld)
-			folderUID := fld.FolderUID
+			folderUID = fld.FolderUID
 			logrus.WithFields(logrus.Fields{
 				"folderUID": folderUID,
 				"filename":  filename,
-			}).Info("Grafana: Create/Upload folderUID")
-
-			folderID = FolderIDFromFolderUID(grafanaVersionFile, folderUID)
+			}).Debug("Grafana: Create/Upload folderUID")
 		} else {
 			logrus.WithFields(logrus.Fields{
 				"error":    err,
@@ -111,10 +84,10 @@ func PushFiles(filenames []string, contents map[string][]byte, versionsFile Vers
 			}).Error("Failed to find title")
 		}
 		logrus.WithFields(logrus.Fields{
-			"folderID": folderID,
-			"filename": filename,
-		}).Info("Grafana: Create/Upload folderID")
-		if err := client.CreateOrUpdateDashboard(contents[filename], folderID); err != nil {
+			"folderUID": folderUID,
+			"filename":  filename,
+		}).Debug("Grafana: Create/Upload folderID")
+		if err := client.CreateOrUpdateDashboard(contents[filename], folderUID); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error":    err,
 				"filename": filename,
@@ -123,31 +96,42 @@ func PushFiles(filenames []string, contents map[string][]byte, versionsFile Vers
 	}
 }
 
-// PushFolders takes a slice of files' names and a map mapping a file's name to its
-// content, and iterates over the first slice. For each file name, it will push
-// to Grafana the content from the map that matches the name, as a creation or
-// an update of an existing dashboard.
-// Logs any errors encountered during an iteration, but doesn't return until all
-// creation and/or update requests have been performed.
-func PushFolders(filenames []string, contents map[string][]byte, versionsFile VersionFile, grafanaVersionFile VersionFile, client *Client) (err error) {
+func PushLibraryFiles(filenames []string, contents map[string][]byte, versionsFile DefsFile, grafanaVersionFile DefsFile, client *Client) {
 	// Push all files to the Grafana API
 	for _, filename := range filenames {
-		var folder Folder
+		_, err := helpers.GetSlug(contents[filename])
 		if _, ok := contents[filename]; !ok {
 			continue
 		}
-		if err = json.Unmarshal(contents[filename], &folder); err != nil {
-			return
-		}
 
-		if err = client.CreateOrUpdateFolder(folder.Title, folder.UID); err != nil {
+		var fld struct {
+			FolderUID string `json:"__folderUID"`
+			UID       string `json:"uid"`
+		}
+		err = json.Unmarshal(contents[filename], &fld)
+		folderUID := fld.FolderUID
+		uid := fld.UID
+
+		if err == nil {
+			logrus.WithFields(logrus.Fields{
+				"folderUID": folderUID,
+				"filename":  filename,
+			}).Info("Grafana: Create/Upload library UID")
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"error":    err,
+				"filename": filename,
+			}).Error("Failed to find title")
+		}
+		libVersion, _ := versionsFile.LibraryVersionByUID[uid]
+
+		if err := client.CreateOrUpdateLibrary(contents[filename], folderUID, libVersion); err != nil {
 			logrus.WithFields(logrus.Fields{
 				"error":    err,
 				"filename": filename,
 			}).Error("Failed to push the file to Grafana")
 		}
 	}
-	return
 }
 
 // DeleteDashboards takes a slice of files' names and a map mapping a file's name
@@ -177,6 +161,30 @@ func DeleteDashboards(filenames []string, contents map[string][]byte, client *Cl
 	}
 }
 
+func DeleteLibraries(filenames []string, contents map[string][]byte, client *Client) {
+	for _, filename := range filenames {
+		var fld struct {
+			UID string `json:"uid"`
+		}
+		err := json.Unmarshal(contents[filename], &fld)
+		uid := fld.UID
+		if err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error":    err,
+				"filename": filename,
+			}).Error("Failed to find the library UID")
+		}
+
+		if err := client.DeleteLibrary(uid); err != nil {
+			logrus.WithFields(logrus.Fields{
+				"error":    err,
+				"filename": filename,
+				"uid":      uid,
+			}).Error("Failed to remove the dashboard from Grafana")
+		}
+	}
+}
+
 // isIgnored checks whether the file must be ignored, by checking if there's an
 // prefix for ignored files set in the configuration file, and if the dashboard
 // described in the file has a name that starts with this prefix. Returns an
@@ -201,16 +209,17 @@ func isIgnored(dashboardJSON []byte, cfg *config.Config) (bool, error) {
 	return false, nil
 }
 
-func Push(cfg *config.Config, fileVersionFile VersionFile, grafanaVersionFile VersionFile, files []string, contents map[string][]byte, client *Client) (err error) {
-	// Filter out all files that are supposed to be ignored by the
+func Push(cfg *config.Config, fileVersionFile DefsFile, grafanaVersionFile DefsFile,
+	dashboardFiles []string, dashboardContents map[string][]byte, client *Client) (err error) {
+	// Filter out all dashboardFiles that are supposed to be ignored by the
 	// dashboard manager.
-	if err = FilterIgnored(&contents, cfg); err != nil {
+	if err = FilterIgnored(&dashboardContents, cfg); err != nil {
 		return err
 	}
 
-	// Push the contents of the files that were added or modified to the
+	// Push the dashboardContents of the dashboardFiles that were added or modified to the
 	// Grafana API.
-	PushFiles(files, contents, fileVersionFile, grafanaVersionFile, client)
+	PushDashboardFiles(dashboardFiles, dashboardContents, fileVersionFile, grafanaVersionFile, client)
 	return
 }
 
@@ -240,7 +249,7 @@ func GetFilesContents(
 func LoadFilesFromDirectory(cfg *config.Config, dir string, subdir string) (filenames []string, contents map[string][]byte, err error) {
 	filenames = make([]string, 0)
 	contents = make(map[string][]byte)
-	files, err := ioutil.ReadDir(filepath.Join(dir, subdir))
+	files, err := os.ReadDir(filepath.Join(dir, subdir))
 	if err != nil {
 		return
 	}

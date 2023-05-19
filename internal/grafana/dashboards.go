@@ -6,6 +6,9 @@ import (
 	"github.com/bruce34/grafana-dashboards-manager/internal/grafana/helpers"
 	"github.com/icza/dyno"
 	"github.com/sirupsen/logrus"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
+	"regexp"
 	"strconv"
 )
 
@@ -28,7 +31,7 @@ type DbSearchResponse struct {
 type dbCreateOrUpdateRequest struct {
 	Dashboard rawJSON `json:"dashboard"`
 	Overwrite bool    `json:"overwrite"`
-	FolderID  int     `json:"folderId"`
+	FolderUID string  `json:"folderUid"`
 }
 
 // dbCreateOrUpdateResponse represents the response sent by the Grafana API to
@@ -46,7 +49,7 @@ type dbCreateOrUpdateResponse struct {
 type Dashboard struct {
 	RawJSON []byte
 	Name    string
-	Slug    string
+	UID     string `json:"uid"`
 	Version int
 }
 
@@ -63,13 +66,17 @@ type DashboardVersion struct {
 	Meta DbSearchResponse
 }
 
-type VersionFile struct {
-	DashboardMetaByTitle map[string]DbSearchResponse `json:"dashboardMetaByTitle"`
-	DashboardMetaBySlug  map[string]DbSearchResponse `json:"dashboardMetaBySlug"`
-	DashboardBySlug      map[string]*Dashboard       `json:"-"`
+// DefsFile is written to disc and contains maps of a dashboard/library name -> raw Json
+type DefsFile struct {
+	DashboardMetaBySlug map[string]DbSearchResponse `json:"dashboardMetaBySlug"`
+	DashboardBySlug     map[string]*Dashboard       `json:"-"`
 
-	FoldersMetaByUID       map[string]DbSearchResponse `json:"foldersMetaByUID"`
-	DashboardVersionBySlug map[string]int              `json:"dashboardVersionBySlug"`
+	LibraryMetaByUID map[string]LibraryElementResponse `json:"libraryMetaBySlug"`
+	LibraryByUID     map[string]*Library               `json:"-"`
+
+	FoldersMetaByUID      map[string]DbSearchResponse `json:"foldersMetaByUID"`
+	DashboardVersionByUID map[string]int              `json:"dashboardVersionByUID"`
+	LibraryVersionByUID   map[string]int              `json:"libraryVersionByUID"`
 }
 
 // UnmarshalJSON tells the JSON parser how to unmarshal JSON data into an
@@ -80,9 +87,9 @@ func (d *Dashboard) UnmarshalJSON(b []byte) (err error) {
 	var body struct {
 		Dashboard rawJSON `json:"dashboard"`
 		Meta      struct {
-			Slug    string `json:"slug"`
-			Version int    `json:"version"`
+			Version int `json:"version"`
 		} `json:"meta"`
+		UID string `json:"uid"`
 	}
 
 	// Unmarshal the JSON into the newly defined structure
@@ -90,36 +97,40 @@ func (d *Dashboard) UnmarshalJSON(b []byte) (err error) {
 		return
 	}
 	// Define all fields with their corresponding value.
-	d.Slug = body.Meta.Slug
 	d.Version = body.Meta.Version
 	d.RawJSON = body.Dashboard
 
 	// Define the dashboard's name from the previously extracted JSON description
-	err = d.setDashboardNameFromRawJSON()
+	d.UID, d.Name, err = UIDNameFromRawJSON(d.RawJSON)
 	return
 }
 
-// setDashboardNameFromJSON finds a dashboard's name from the content of its
-// RawJSON field
-func (d *Dashboard) setDashboardNameFromRawJSON() (err error) {
+// UIDNameFromRawJSON finds a dashboard's name from the content of its
+// RawJSON fields
+func UIDNameFromRawJSON(rawJSON []byte) (UID, name string, err error) {
 	// Define the necessary structure to catch the dashboard's name
-	var dashboard struct {
+	var v struct {
 		Name string `json:"title"`
+		UID  string `json:"uid"`
 	}
 
 	// Unmarshal the JSON content into the structure and set the dashboard's
 	// name
-	err = json.Unmarshal(d.RawJSON, &dashboard)
-	d.Name = dashboard.Name
+	err = json.Unmarshal(rawJSON, &v)
+	return v.UID, v.Name, err
+}
 
-	return
+var replacementForSlug = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+
+func GetSluglikeName(UID, Title string) string {
+	return UID + ":" + replacementForSlug.ReplaceAllString(Title, "_")
 }
 
 // GetDashboardsURIs requests the Grafana API for the list of all dashboards,
 // then returns the dashboards' URIs. An URI will look like "uid/[UID]".
 // Returns an error if there was an issue requesting the URIs or parsing the
 // response body.
-func (c *Client) GetDashboardsURIs() (URIs []string, dashboardMetaBySlug map[string]DbSearchResponse, FoldersMetaByUID map[string]DbSearchResponse, Folders []DbSearchResponse, err error) {
+func (c *Client) GetDashboardsURIs() (dashboardMetaBySlug map[string]DbSearchResponse, FoldersMetaByUID map[string]DbSearchResponse, Folders []DbSearchResponse, err error) {
 
 	FoldersMetaByUID = make(map[string]DbSearchResponse, 0)
 	dashboardMetaBySlug = make(map[string]DbSearchResponse, 0)
@@ -139,13 +150,12 @@ func (c *Client) GetDashboardsURIs() (URIs []string, dashboardMetaBySlug map[str
 		"json": string(resp),
 	}).Debug("JSON")
 
-	URIs = make([]string, 0)
 	Folders = make([]DbSearchResponse, 0)
 
 	for _, db := range respBody {
+		slug := GetSluglikeName(db.UID, db.Title)
 		if db.Type == "dash-db" {
-			URIs = append(URIs, "uid/"+db.UID)
-			dashboardMetaBySlug[string(db.Title)] = db
+			dashboardMetaBySlug[slug] = db
 			logrus.WithFields(logrus.Fields{
 				"db": db,
 			}).Info("Dashboard metadata from grafana")
@@ -177,21 +187,45 @@ func (c *Client) GetDashboard(URI string) (db *Dashboard, err error) {
 
 	db = new(Dashboard)
 	err = json.Unmarshal(body, db)
+	dashRaw := string(db.RawJSON)
+	result := gjson.Get(dashRaw, "panels")
+	changed := false
+	for i, _ := range result.Array() {
+		dashRaw, _ = sjson.Delete(dashRaw, "panels."+strconv.Itoa(i)+".libraryPanel.version")
+		if dashRaw != string(db.RawJSON) {
+			changed = true
+			dashRaw, _ = sjson.Delete(dashRaw, "panels."+strconv.Itoa(i)+".libraryPanel.meta.created")
+			dashRaw, _ = sjson.Delete(dashRaw, "panels."+strconv.Itoa(i)+".libraryPanel.meta.createdBy")
+			dashRaw, _ = sjson.Delete(dashRaw, "panels."+strconv.Itoa(i)+".libraryPanel.meta.updated")
+			dashRaw, _ = sjson.Delete(dashRaw, "panels."+strconv.Itoa(i)+".libraryPanel.meta.updatedBy")
+		}
+	}
+	dashRaw, _ = sjson.Delete(dashRaw, "meta.created")
+	dashRaw, _ = sjson.Delete(dashRaw, "meta.updated")
+	if changed {
+		var m interface{}
+		err = json.Unmarshal([]byte(dashRaw), &m)
+		prettyStr, _ := json.MarshalIndent(m, "", "  ")
+		logrus.Debugf("rawJSON dashboard %v", string(prettyStr))
+	}
+
+	db.RawJSON = []byte(dashRaw)
+
 	return
 }
 
 // CreateOrUpdateDashboard takes a given JSON content (as []byte) and create the
 // dashboard if it doesn't exist on the Grafana instance, else updates the
 // existing one. The Grafana API decides whether to create or update based on the
-// "id" attribute in the dashboard's JSON: If it's unkown or null, it's a
+// "id" attribute in the dashboard's JSON: If it's unknown or null, it's a
 // creation, else it's an update.
 // Returns an error if there was an issue generating the request body, performing
 // the request or decoding the response's body.
-func (c *Client) CreateOrUpdateDashboard(contentJSON []byte, folderID int) (err error) {
+func (c *Client) CreateOrUpdateDashboard(contentJSON []byte, folderUID string) (err error) {
 	reqBody := dbCreateOrUpdateRequest{
 		Dashboard: rawJSON(contentJSON),
 		Overwrite: true,
-		FolderID:  folderID,
+		FolderUID: folderUID,
 	}
 
 	// Generate the request body's JSON
@@ -214,7 +248,7 @@ func (c *Client) CreateOrUpdateDashboard(contentJSON []byte, folderID int) (err 
 		"idv":  idv,
 		"idv1": idv1,
 		"err3": err3,
-	}).Info("Removed??")
+	}).Debug("Removed??")
 	if err != nil {
 		return
 	}
@@ -229,15 +263,15 @@ func (c *Client) createOrUpdateDashboardFolder(reqBodyJSON []byte, contentJSON [
 
 func (c *Client) createOrUpdateDashboardFolderMethod(reqBodyJSON []byte, contentJSON []byte, apiPath string, method string) (err error) {
 
-	var httpError *httpUnkownError
+	var httpError *httpUnknownError
 	var isHttpUnknownError bool
 	// Send the request
 	respBodyJSON, err := c.request(method, apiPath, reqBodyJSON)
 	if err != nil {
-		// Check the error against the httpUnkownError type in order to decide
+		// Check the error against the httpUnknownError type in order to decide
 		// how to process the error
-		httpError, isHttpUnknownError = err.(*httpUnkownError)
-		// We process httpUnkownError errors below, after we decoded the body
+		httpError, isHttpUnknownError = err.(*httpUnknownError)
+		// We process httpUnknownError errors below, after we decoded the body
 		if !isHttpUnknownError {
 			return
 		}
